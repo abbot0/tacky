@@ -1,6 +1,6 @@
 # Tacky
 
-Tacky is a Trello‑style productivity workspace built with **Electron** and **React**. It bundles kanban boards, a lightweight notes editor, and an Excalidraw‑powered canvas into a single offline desktop app.
+Tacky is a productivity workspace built with **Electron** and **React**. It bundles kanban boards, a lightweight notes editor, and an Excalidraw‑powered canvas into a single offline desktop app.
 
 ## ✨ Features
 
