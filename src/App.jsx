@@ -4,7 +4,9 @@ import BoardsDashboard from './views/Dashboard.jsx';
 import Board from './views/Board.jsx';
 import NotesWorkspace from './views/NotesWorkspace.jsx';
 import CanvasWorkspace from './views/CanvasWorkspace.jsx';
+import CanvasDashboard from './views/CanvasDashboard.jsx';
 import NotesDashboard from './views/NotesDashboard.jsx';
+import QuickActionsSheet from './components/QuickActionsSheet.jsx';
 import {
   loadBoards,
   saveBoards,
@@ -91,6 +93,7 @@ export default function App(){
     if (typeof window === 'undefined') return true;
     return window.innerWidth >= 1024;
   });
+  const [isQuickActionsOpen, setQuickActionsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState({ status:'idle', version:null, progress:null, message:null });
   const appVersion = typeof window !== 'undefined' && window?.tacky?.version ? window.tacky.version : '1.0.2';
 
@@ -228,7 +231,7 @@ export default function App(){
   const openBoard = (id)=> setRoute({ name:'board', id });
   const showBoards = ()=> setRoute({ name:'boards' });
   const showNotesDashboard = ()=> setRoute({ name:'notes-dashboard' });
-  const showCanvasDashboard = ()=> setRoute({ name:'overview' });
+  const showCanvasDashboard = ()=> setRoute({ name:'canvas-dashboard' });
   const backHome = ()=> showBoards();
 
   const createBoard = (name, wallpaper)=>{
@@ -292,6 +295,31 @@ export default function App(){
     setCanvases(prev => prev.map(canvas => canvas.id===id ? { ...canvas, scene: safeScene, updatedAt: Date.now() } : canvas));
   };
 
+  const navigateQuick = useCallback((target)=>{
+    switch(target){
+      case 'overview':
+        setRoute({ name:'overview' });
+        break;
+      case 'boards':
+        showBoards();
+        break;
+      case 'notes-dashboard':
+        showNotesDashboard();
+        break;
+      case 'canvas-dashboard':
+        showCanvasDashboard();
+        break;
+      case 'notes':
+        setRoute({ name:'notes' });
+        break;
+      case 'canvas':
+        setRoute({ name:'canvas' });
+        break;
+      default:
+        break;
+    }
+  },[showBoards, showNotesDashboard, showCanvasDashboard]);
+
   useEffect(()=>{
     if(route.name==='notes' && !currentNoteId && notes.length){
       setCurrentNoteId(notes[0].id);
@@ -311,7 +339,7 @@ export default function App(){
   const activeCategory = (() => {
     if(route.name === 'board' || route.name === 'boards') return 'boards';
     if(route.name === 'notes' || route.name === 'notes-dashboard') return 'notes';
-    if(route.name === 'canvas') return 'canvas';
+    if(route.name === 'canvas' || route.name === 'canvas-dashboard') return 'canvas';
     return 'overview';
   })();
   const activeLabel = (()=> {
@@ -327,6 +355,8 @@ export default function App(){
         return 'Notes';
       case 'notes':
         return 'Notes workspace';
+      case 'canvas-dashboard':
+        return 'Canvas library';
       case 'canvas':
         return 'Canvas workspace';
       default:
@@ -365,9 +395,22 @@ export default function App(){
       hint:'Sketch freely',
       icon:'canvas',
       isActive: activeCategory==='canvas',
-      onClick: ()=> setRoute({ name:'canvas' })
+      onClick: showCanvasDashboard
     }
   ];
+
+  const openQuickActions = useCallback(()=> setQuickActionsOpen(true),[]);
+  const closeQuickActions = useCallback(()=> setQuickActionsOpen(false),[]);
+
+  const handleNavSelect = useCallback((handler)=>{
+    if (typeof handler === 'function'){
+      handler();
+    }
+    closeQuickActions();
+    if (typeof window !== 'undefined' && window.innerWidth < 1024){
+      setSidebarOpen(false);
+    }
+  },[closeQuickActions]);
 
   const footerStatus = (()=> {
     switch(updateStatus.status){
@@ -395,115 +438,184 @@ export default function App(){
     }
   },[route?.name, route?.id]);
 
+  useEffect(()=>{
+    if (typeof document === 'undefined') return undefined;
+    const cls = document.body.classList;
+    if (isQuickActionsOpen){
+      cls.add('quick-actions-open');
+    } else {
+      cls.remove('quick-actions-open');
+    }
+    return ()=> cls.remove('quick-actions-open');
+  },[isQuickActionsOpen]);
+
+  useEffect(()=>{
+    if (typeof window === 'undefined') return undefined;
+    const handler = (event)=>{
+      const key = event.key?.toLowerCase?.() ?? '';
+      const isModifier = event.metaKey || event.ctrlKey;
+      const tag = (event.target?.tagName ?? '').toLowerCase();
+      const isFormField = ['input','textarea','select'].includes(tag) || event.target?.isContentEditable;
+      if (isModifier && key === 'k'){
+        if (isFormField) return;
+        event.preventDefault();
+        setQuickActionsOpen(prev => !prev);
+      }
+      if (key === 'escape'){
+        setQuickActionsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return ()=> window.removeEventListener('keydown', handler);
+  },[]);
+
   return (
-    <div className={`app-shell ${isSidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
-      <aside className="app-sidebar">
-        <div className="sidebar-brand">
-          <span className="brand-mark">
-            <SvgIcon name="sparkle" className="brand-icon" />
-          </span>
-          <div className="brand-copy">
-            <span className="brand-title">Tacky</span>
-            <span className="brand-subtitle">Workspaces</span>
+    <div className={`app-frame ${isSidebarOpen ? 'nav-open' : 'nav-collapsed'}`}>
+      <div className="app-frame-backdrop" aria-hidden="true" />
+      <aside className="nav-panel">
+        <div className="nav-panel-inner">
+          <div className="nav-brand">
+            <span className="nav-logo">
+              <SvgIcon name="sparkle" className="brand-icon" />
+            </span>
+            <div className="nav-brand-copy">
+              <span className="nav-brand-title">Tacky Studio</span>
+              <span className="nav-brand-subtitle">Creative control</span>
+            </div>
           </div>
-        </div>
-        <nav className="sidebar-nav">
-          {sidebarLinks.map(item => (
+          <div className="nav-section">
+            <span className="nav-section-title">Navigate</span>
+            <nav className="nav-links">
+              {sidebarLinks.map(item => (
+                <button
+                  type="button"
+                  key={item.key}
+                  className={`nav-link ${item.isActive ? 'is-active' : ''}`}
+                  onClick={()=>handleNavSelect(item.onClick)}
+                  aria-current={item.isActive ? 'page' : undefined}
+                >
+                  <span className="nav-link-icon">
+                    <SvgIcon name={item.icon} />
+                  </span>
+                  <div className="nav-link-copy">
+                    <span className="nav-link-label">{item.label}</span>
+                    <span className="nav-link-hint">{item.hint}</span>
+                  </div>
+                  <span className="nav-link-indicator" aria-hidden="true" />
+                </button>
+              ))}
+            </nav>
+          </div>
+          <div className="nav-section nav-create">
+            <span className="nav-section-title">Create</span>
+            <div className="nav-create-actions">
+              <button type="button" onClick={()=>handleNavSelect(()=>createBoard('New board'))}>Board</button>
+              <button type="button" onClick={()=>handleNavSelect(()=>createNote('New note'))}>Note</button>
+              <button type="button" onClick={()=>handleNavSelect(()=>createCanvas('New canvas'))}>Canvas</button>
+            </div>
+          </div>
+          <div className="nav-compact-actions">
             <button
               type="button"
-              key={item.key}
-              className={`sidebar-nav-item ${item.isActive ? 'is-active' : ''}`}
-              onClick={item.onClick}
-              aria-current={item.isActive ? 'page' : undefined}
+              onClick={openQuickActions}
+              title="Quick actions"
+              aria-label="Open quick actions"
             >
-              <SvgIcon name={item.icon} className="nav-icon" />
-              <div className="nav-content">
-                <span className="nav-label">{item.label}</span>
-                <span className="nav-hint">{item.hint}</span>
-              </div>
-              <span className="nav-indicator" aria-hidden="true" />
+              <span className="nav-compact-icon">+</span>
             </button>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <div className="sidebar-status">
-            <span className="sidebar-status-label">Status</span>
-            <span className={`sidebar-status-value status-${updateStatus.status}`}>{footerStatus}</span>
           </div>
-          <div className="sidebar-version-row">
-            <span className="sidebar-version-label">Version</span>
-            <span className="sidebar-version">v{appVersion}</span>
+          <div className="nav-footer">
+            <div className="nav-footer-status">
+              <span className="nav-footer-label">Status</span>
+              <span className={`nav-footer-value status-${updateStatus.status}`}>{footerStatus}</span>
+            </div>
+            <div className="nav-footer-meta">
+              <span className="nav-footer-label">Version</span>
+              <span className="nav-footer-value">v{appVersion}</span>
+            </div>
+            <button
+              type="button"
+              className="nav-footer-btn"
+              onClick={retryCheck}
+            >
+              <SvgIcon name="refresh" className="nav-footer-icon" />
+              <span>{updateStatus.status === 'checking' ? 'Checking...' : 'Check updates'}</span>
+            </button>
           </div>
-          <button
-            type="button"
-            className="sidebar-update-btn"
-            onClick={retryCheck}
-          >
-            <SvgIcon name="refresh" className="sidebar-update-icon" />
-            <span>{updateStatus.status === 'checking' ? 'Checking...' : 'Check for updates'}</span>
-          </button>
         </div>
       </aside>
-      {!isSidebarOpen && (
-        <button
-          type="button"
-          className="sidebar-floating-btn"
-          onClick={toggleSidebar}
-          title="Open navigation"
-        >
-          <SvgIcon name="menu" />
-        </button>
-      )}
-
-      <div className="app-main">
-        <header className="app-header">
+      <div className="main-panel">
+        <header className="global-header">
           <div className="header-left">
             <button
               type="button"
-              className="header-menu-btn"
+              className="nav-trigger"
               onClick={toggleSidebar}
               title={isSidebarOpen ? 'Hide navigation' : 'Show navigation'}
             >
               <SvgIcon name="menu" />
             </button>
-            <div className="header-breadcrumb">
-              <span className="crumb">Workspace</span>
-              <span className="crumb-sep" aria-hidden="true">/</span>
-              <span className="crumb active">{activeLabel}</span>
+            <div className="header-titles">
+              <span className="header-crumb">Workspace</span>
+              <h1 className="header-title">{activeLabel}</h1>
             </div>
           </div>
-          <div className="header-actions">
-            {route.name==='board' && (
-              <button type="button" className="header-pill" onClick={backHome}>
-                <SvgIcon name="arrowLeft" className="icon-sm" />
-                <span>Back to boards</span>
-              </button>
-            )}
-            {updateStatus.status === 'available' && (
+          <div className="header-right">
+            <div className="header-counters">
+              <div className="header-counter">
+                <span className="header-counter-value">{boards.length}</span>
+                <span className="header-counter-label">Boards</span>
+              </div>
+              <div className="header-counter">
+                <span className="header-counter-value">{notes.length}</span>
+                <span className="header-counter-label">Notes</span>
+              </div>
+              <div className="header-counter">
+                <span className="header-counter-value">{canvases.length}</span>
+                <span className="header-counter-label">Canvases</span>
+              </div>
+            </div>
+            <div className="header-controls">
               <button
                 type="button"
-                className="header-pill accent"
-                onClick={startDownload}
-              >
-                <SvgIcon name="download" className="icon-sm" />
-                <span>Download update</span>
-              </button>
-            )}
-            {updateStatus.status === 'downloaded' && (
-              <button
-                type="button"
-                className="header-pill accent"
-                onClick={installUpdate}
+                className="header-pill ghost quick-actions-trigger"
+                onClick={openQuickActions}
               >
                 <SvgIcon name="sparkle" className="icon-sm" />
-                <span>Install update</span>
+                <span>Quick actions</span>
               </button>
-            )}
+              {route.name==='board' && (
+                <button type="button" className="header-pill" onClick={backHome}>
+                  <SvgIcon name="arrowLeft" className="icon-sm" />
+                  <span>Back to boards</span>
+                </button>
+              )}
+              {updateStatus.status === 'available' && (
+                <button
+                  type="button"
+                  className="header-pill accent"
+                  onClick={startDownload}
+                >
+                  <SvgIcon name="download" className="icon-sm" />
+                  <span>Download update</span>
+                </button>
+              )}
+              {updateStatus.status === 'downloaded' && (
+                <button
+                  type="button"
+                  className="header-pill accent"
+                  onClick={installUpdate}
+                >
+                  <SvgIcon name="sparkle" className="icon-sm" />
+                  <span>Install update</span>
+                </button>
+              )}
+            </div>
           </div>
         </header>
         {shouldShowBanner && (
-          <div className={`update-banner update-banner-${updateStatus.status}`}>
-            <div className="update-banner-content">
+          <div className={`system-banner system-banner-${updateStatus.status}`}>
+            <div className="system-banner-icon">
               <SvgIcon
                 name={
                   updateStatus.status === 'error'
@@ -514,42 +626,42 @@ export default function App(){
                 }
                 className="banner-icon"
               />
-              <div className="banner-copy">
-                {updateStatus.status === 'available' && (
-                  <>
-                    <p className="banner-title">
-                      Update{updateStatus.version ? ` ${updateStatus.version}` : ''} is ready.
-                    </p>
-                    <p className="banner-subtitle">
-                      Grab the latest improvements when it suits you.
-                    </p>
-                  </>
-                )}
-                {updateStatus.status === 'downloading' && (
-                  <>
-                    <p className="banner-title">Downloading update...</p>
-                    <p className="banner-subtitle">Progress {percent}%</p>
-                  </>
-                )}
-                {updateStatus.status === 'downloaded' && (
-                  <>
-                    <p className="banner-title">
-                      Update{updateStatus.version ? ` ${updateStatus.version}` : ''} ready to install.
-                    </p>
-                    <p className="banner-subtitle">Restart to finish updating.</p>
-                  </>
-                )}
-                {updateStatus.status === 'error' && (
-                  <>
-                    <p className="banner-title">Update failed.</p>
-                    <p className="banner-subtitle">
-                      {updateStatus.message ?? 'Something went wrong while downloading the update.'}
-                    </p>
-                  </>
-                )}
-              </div>
             </div>
-            <div className="banner-actions">
+            <div className="system-banner-copy">
+              {updateStatus.status === 'available' && (
+                <>
+                  <p className="banner-title">
+                    Update{updateStatus.version ? ` ${updateStatus.version}` : ''} is ready.
+                  </p>
+                  <p className="banner-subtitle">
+                    Grab the latest improvements when it suits you.
+                  </p>
+                </>
+              )}
+              {updateStatus.status === 'downloading' && (
+                <>
+                  <p className="banner-title">Downloading update...</p>
+                  <p className="banner-subtitle">Progress {percent}%</p>
+                </>
+              )}
+              {updateStatus.status === 'downloaded' && (
+                <>
+                  <p className="banner-title">
+                    Update{updateStatus.version ? ` ${updateStatus.version}` : ''} ready to install.
+                  </p>
+                  <p className="banner-subtitle">Restart to finish updating.</p>
+                </>
+              )}
+              {updateStatus.status === 'error' && (
+                <>
+                  <p className="banner-title">Update failed.</p>
+                  <p className="banner-subtitle">
+                    {updateStatus.message ?? 'Something went wrong while downloading the update.'}
+                  </p>
+                </>
+              )}
+            </div>
+            <div className="system-banner-actions">
               {updateStatus.status === 'available' && (
                 <button type="button" className="header-pill ghost" onClick={startDownload}>
                   <span>Download</span>
@@ -571,65 +683,84 @@ export default function App(){
             </div>
           </div>
         )}
-        <main className="app-content">
-          {route.name==='overview' && (
-            <Overview
-              boards={boards}
-              notes={notes}
-              canvases={canvases}
-              onCreateBoard={()=>createBoard('New board')}
-              onCreateNote={()=>createNote('New note')}
-              onCreateCanvas={()=>createCanvas('New canvas')}
-              onOpenBoard={openBoard}
-              onOpenNote={selectNote}
-              onOpenCanvas={selectCanvas}
-              onShowBoards={showBoards}
-              onShowNotes={showNotesDashboard}
-              onShowCanvases={()=> setRoute({ name:'canvas' })}
-            />
-          )}
-          {route.name==='boards' && (
-            <BoardsDashboard
-              boards={boards}
-              onOpen={openBoard}
-              onCreate={createBoard}
-              onDelete={deleteBoard}
-            />
-          )}
-          {route.name==='board' && (
-            <Board
-              board={boards.find(b=>b.id===route.id)}
-              onUpdate={updateBoard}
-              onDelete={deleteBoard}
-            />
-          )}
-          {route.name==='notes-dashboard' && (
-            <NotesDashboard
-              notes={notes}
-              onSelect={selectNote}
-              onCreate={()=>createNote('New note')}
-            />
-          )}
-          {route.name==='notes' && (
-            <NotesWorkspace
-              notes={notes}
-              selectedNoteId={currentNoteId}
-              onSelectNote={selectNote}
-              onCreateNote={createNote}
-              onUpdateNote={updateNote}
-              onDeleteNote={deleteNote}
-              onShowDashboard={showNotesDashboard}
-            />
-          )}
-          {route.name==='canvas' && (
-            <CanvasWorkspace
-              canvases={canvases}
-              selectedCanvasId={currentCanvasId}
-              onUpdateCanvas={updateCanvasScene}
-            />
-          )}
-        </main>
+        <div className="main-scroll">
+          <main className="workspace-view">
+            {route.name==='overview' && (
+              <Overview
+                boards={boards}
+                notes={notes}
+                canvases={canvases}
+                onCreateBoard={()=>createBoard('New board')}
+                onCreateNote={()=>createNote('New note')}
+                onCreateCanvas={()=>createCanvas('New canvas')}
+                onOpenBoard={openBoard}
+                onOpenNote={selectNote}
+                onOpenCanvas={selectCanvas}
+                onShowBoards={showBoards}
+                onShowNotes={showNotesDashboard}
+                onShowCanvases={showCanvasDashboard}
+              />
+            )}
+            {route.name==='boards' && (
+              <BoardsDashboard
+                boards={boards}
+                onOpen={openBoard}
+                onCreate={createBoard}
+                onDelete={deleteBoard}
+              />
+            )}
+            {route.name==='board' && (
+              <Board
+                board={boards.find(b=>b.id===route.id)}
+                onUpdate={updateBoard}
+                onDelete={deleteBoard}
+              />
+            )}
+            {route.name==='notes-dashboard' && (
+              <NotesDashboard
+                notes={notes}
+                onSelect={selectNote}
+                onCreate={()=>createNote('New note')}
+              />
+            )}
+            {route.name==='notes' && (
+              <NotesWorkspace
+                notes={notes}
+                selectedNoteId={currentNoteId}
+                onSelectNote={selectNote}
+                onCreateNote={createNote}
+                onUpdateNote={updateNote}
+                onDeleteNote={deleteNote}
+                onShowDashboard={showNotesDashboard}
+              />
+            )}
+            {route.name==='canvas-dashboard' && (
+              <CanvasDashboard
+                canvases={canvases}
+                onOpen={selectCanvas}
+                onCreate={createCanvas}
+                onRename={renameCanvas}
+                onDelete={deleteCanvas}
+              />
+            )}
+            {route.name==='canvas' && (
+              <CanvasWorkspace
+                canvases={canvases}
+                selectedCanvasId={currentCanvasId}
+                onUpdateCanvas={updateCanvasScene}
+              />
+            )}
+          </main>
+        </div>
       </div>
+      <QuickActionsSheet
+        isOpen={isQuickActionsOpen}
+        onClose={closeQuickActions}
+        onCreateBoard={()=>createBoard('New board')}
+        onCreateNote={()=>createNote('New note')}
+        onCreateCanvas={()=>createCanvas('New canvas')}
+        onNavigate={navigateQuick}
+      />
     </div>
   );
 }

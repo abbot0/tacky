@@ -245,9 +245,30 @@ export default function Board({board, onUpdate, onDelete}){
                           >
                             <div className="list-header" {...provided2.dragHandleProps}>
                               <h4 className="list-title">{list.title}</h4>
-                              <div className="row">
-                                <button className="button icon-btn" onClick={()=>addCard(list.id)}>+ Card</button>
-                                <button className="button icon-btn" onClick={()=>setConfirm({type:'list', id:list.id, name:list.title})}>Delete</button>
+                              <div className="list-actions">
+                                <button
+                                  type="button"
+                                  className="icon-small accent"
+                                  onClick={()=>addCard(list.id)}
+                                  title="Add card"
+                                  aria-label="Add card"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 4a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H5a1 1 0 0 1 0-2h6V5a1 1 0 0 1 1-1z" fill="currentColor"/>
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="icon-small danger"
+                                  onClick={()=>setConfirm({type:'list', id:list.id, name:list.title})}
+                                  title="Delete list"
+                                  aria-label="Delete list"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M9 4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2h5a1 1 0 1 1 0 2h-1v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6H3a1 1 0 0 1 0-2h6zm9 2H6v14h12z" fill="currentColor"/>
+                                    <path d="M10 9a1 1 0 0 1 1 1v7a1 1 0 1 1-2 0v-7a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v7a1 1 0 1 1-2 0v-7a1 1 0 0 1 1-1z" fill="currentColor"/>
+                                  </svg>
+                                </button>
                               </div>
                             </div>
                             <StrictModeDroppable droppableId={list.id} type="CARD">
@@ -271,8 +292,36 @@ export default function Board({board, onUpdate, onDelete}){
                                               onClick={()=> setEditCard({listId:list.id, cardId:card.id}) }
                                             >
                                               <div className="card-actions">
-                                                <button className="icon-small" onClick={(e)=>{ e.stopPropagation(); setEditCard({listId:list.id, cardId:card.id}); }}>�oZ</button>
-                                                <button className="icon-small" onClick={(e)=>{ e.stopPropagation(); setConfirm({type:'card', listId:list.id, cardId:card.id, name:card.title}); }}>dY-`</button>
+                                                <button
+                                                  type="button"
+                                                  className="icon-small"
+                                                  onClick={(event)=>{
+                                                    event.stopPropagation();
+                                                    setEditCard({listId:list.id, cardId:card.id});
+                                                  }}
+                                                  title="Edit card"
+                                                  aria-label="Edit card"
+                                                >
+                                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M14.69 3.16a2 2 0 0 1 2.83 0l3.32 3.32a2 2 0 0 1 0 2.83l-8.81 8.82a2 2 0 0 1-.94.53l-4.27.95a1 1 0 0 1-1.18-1.18l.95-4.27a2 2 0 0 1 .53-.94zM7.09 13.68 6.5 16.5l2.82-.59z" fill="currentColor"/>
+                                                    <path d="M4 20h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2z" fill="currentColor" opacity=".3"/>
+                                                  </svg>
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  className="icon-small danger"
+                                                  onClick={(event)=>{
+                                                    event.stopPropagation();
+                                                    setConfirm({type:'card', listId:list.id, cardId:card.id, name:card.title});
+                                                  }}
+                                                  title="Delete card"
+                                                  aria-label="Delete card"
+                                                >
+                                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M9 4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2h5a1 1 0 1 1 0 2h-1v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6H3a1 1 0 0 1 0-2h6zm9 2H6v14h12z" fill="currentColor"/>
+                                                    <path d="M10 9a1 1 0 0 1 1 1v7a1 1 0 1 1-2 0v-7a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v7a1 1 0 1 1-2 0v-7a1 1 0 0 1 1-1z" fill="currentColor"/>
+                                                  </svg>
+                                                </button>
                                               </div>
                                               <div className="card-labels">{labelsForCard(card.labels)}</div>
                                               <div className="card-title">{card.title}</div>
@@ -347,3 +396,7 @@ export default function Board({board, onUpdate, onDelete}){
     </div>
   );
 }
+
+
+
+
