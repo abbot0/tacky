@@ -9,6 +9,7 @@
     "dev:electron": "wait-on dist/index.html && cross-env ELECTRON_DISABLE_SECURITY_WARNINGS=1 electron .",
     "build": "webpack --mode production",
     "dist": "npm run build && electron-builder -w",
+    "package:win": "npm run build && electron-builder --win nsis --publish never --config.directories.output=release",
     "release:win": "npm run build && electron-builder --publish always --win nsis",
     "release": "npm run release:win"
   },
