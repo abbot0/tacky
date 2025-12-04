@@ -15,17 +15,12 @@ const PlusIcon = ()=>(
   </svg>
 );
 
-const DotsIcon = ()=>(
-  <svg className="icon icon-xs" viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M5 12a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0zm5.5 0a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0zm5.5 0a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z" fill="currentColor"/>
-  </svg>
-);
-
-export default function Dashboard({ boards, onOpen, onCreate, onDelete }) {
+export default function Dashboard({ boards, onOpen, onCreate, onRename, onDelete }) {
   const [showNew, setShowNew] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('newest');
+  const [editing, setEditing] = useState(null);
 
   const filteredBoards = useMemo(()=>{
     const normalisedQuery = query.trim().toLowerCase();
@@ -61,6 +56,17 @@ export default function Dashboard({ boards, onOpen, onCreate, onDelete }) {
     onCreate(vals.name, vals.wallpaper);
     closeCreateBoard();
   };
+
+  const startEditing = (board)=> setEditing({ id: board.id, value: board.name ?? '' });
+  const commitEditing = ()=>{
+    if(!editing) return;
+    const next = editing.value.trim();
+    if(next && typeof onRename === 'function'){
+      onRename(editing.id, next);
+    }
+    setEditing(null);
+  };
+  const cancelEditing = ()=> setEditing(null);
 
   return (
     <div className="dashboard-shell">
@@ -133,15 +139,43 @@ export default function Dashboard({ boards, onOpen, onCreate, onDelete }) {
             <div className="board-card-cover" />
             <div className="board-card-body">
               <header className="board-card-header">
-                <h3 className="board-card-title">{board.name || 'Untitled board'}</h3>
-                <button
-                  type="button"
-                  className="icon-button subtle"
-                  onClick={(event)=>{ event.stopPropagation(); setConfirm({ id:board.id, name:board.name }); }}
-                  title="Board options"
-                >
-                  <DotsIcon />
-                </button>
+                {editing?.id === board.id ? (
+                  <div
+                    className="card-rename"
+                    onClick={(event)=>event.stopPropagation()}
+                    role="presentation"
+                  >
+                    <input
+                      className="card-rename-input"
+                      autoFocus
+                      value={editing.value}
+                      onChange={(event)=>setEditing(prev=>({ ...prev, value:event.target.value }))}
+                      onBlur={commitEditing}
+                      onKeyDown={(event)=>{
+                        if(event.key === 'Enter'){ event.preventDefault(); commitEditing(); }
+                        if(event.key === 'Escape'){ event.preventDefault(); cancelEditing(); }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <h3 className="board-card-title">{board.name || 'Untitled board'}</h3>
+                )}
+                <div className="card-actions-row">
+                  <button
+                    type="button"
+                    className="card-action-btn"
+                    onClick={(event)=>{ event.stopPropagation(); startEditing(board); }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="card-action-btn danger"
+                    onClick={(event)=>{ event.stopPropagation(); setConfirm({ id:board.id, name:board.name }); }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </header>
               <div className="board-card-meta">
                 {board.dots.slice(0,6).map((color, index)=>(

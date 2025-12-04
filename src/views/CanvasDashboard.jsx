@@ -212,7 +212,7 @@ export default function CanvasDashboard({
               <header className="canvas-card-header">
                 {editing?.id === canvas.id ? (
                   <div
-                    className="canvas-card-rename"
+                    className="card-rename"
                     onClick={(event) => event.stopPropagation()}
                     role="presentation"
                   >
@@ -231,17 +231,17 @@ export default function CanvasDashboard({
                         }
                       }}
                       onBlur={commitEditing}
-                      className="canvas-card-rename-input"
+                      className="card-rename-input"
                       placeholder="Canvas name"
                     />
                   </div>
                 ) : (
                   <h3 className="canvas-card-title">{canvas.name || 'Untitled canvas'}</h3>
                 )}
-                <div className="canvas-card-actions">
+                <div className="card-actions-row">
                   <button
                     type="button"
-                    className="canvas-card-action"
+                    className="card-action-btn"
                     onClick={(event) => {
                       event.stopPropagation();
                       startEditing(canvas);
@@ -252,7 +252,7 @@ export default function CanvasDashboard({
                   </button>
                   <button
                     type="button"
-                    className="canvas-card-action danger"
+                    className="card-action-btn danger"
                     onClick={(event) => {
                       event.stopPropagation();
                       setConfirm({ id: canvas.id, name: canvas.name });

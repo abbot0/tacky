@@ -6,6 +6,7 @@ import NotesWorkspace from './views/NotesWorkspace.jsx';
 import CanvasWorkspace from './views/CanvasWorkspace.jsx';
 import CanvasDashboard from './views/CanvasDashboard.jsx';
 import NotesDashboard from './views/NotesDashboard.jsx';
+import Settings from './views/Settings.jsx';
 import QuickActionsSheet from './components/QuickActionsSheet.jsx';
 import {
   loadBoards,
@@ -61,8 +62,48 @@ const ICONS = {
   ],
   refresh: [
     'M19 4.5a1 1 0 0 0-2 0v1.26a7 7 0 0 0-11.64 5.08 1 1 0 0 0 2 0 5 5 0 0 1 8.17-3.8l-1.46 1.46a1 1 0 1 0 1.42 1.42l3.17-3.18a1 1 0 0 0 .29-.7V4.5zM5 19.5a1 1 0 0 0 2 0v-1.26a7 7 0 0 0 11.64-5.08 1 1 0 0 0-2 0 5 5 0 0 1-8.17 3.8l1.46-1.46a1 1 0 0 0-1.42-1.42l-3.17 3.18a1 1 0 0 0-.29.7v1.54z'
+  ],
+  palette: [
+    'M12 3a9 9 0 1 0 0 18h1.35a2.15 2.15 0 0 0 2.05-2.9l-.33-.96a1 1 0 0 1 .95-1.34H17a3 3 0 0 0 1.73-5.46A9.5 9.5 0 0 0 12 3z',
+    'M8 9.5a1.25 1.25 0 1 1-2.5 0A1.25 1.25 0 0 1 8 9.5z',
+    'M12 7a1.25 1.25 0 1 1-2.5 0A1.25 1.25 0 0 1 12 7z',
+    'M15.5 9.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0z',
+    'M13.5 13.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0z'
   ]
 };
+
+const THEMES = [
+  {
+    id:'midnight',
+    name:'Midnight Dark',
+    description:'The original neon midnight glow.',
+    accent:'#9f7aea',
+    swatch:['#0b1b3a','#121d34','#9f7aea']
+  },
+  {
+    id:'graphite',
+    name:'Graphite Grey',
+    description:'Smoky charcoal with soft edges.',
+    accent:'#22d3ee',
+    swatch:['#0f121a','#1d232f','#22d3ee']
+  },
+  {
+    id:'noir',
+    name:'Noir Black',
+    description:'Pure blacks with crisp cyan highlights.',
+    accent:'#38bdf8',
+    swatch:['#050505','#0f0f0f','#38bdf8']
+  },
+  {
+    id:'light',
+    name:'Lumen Light',
+    description:'Bright, low-glare surfaces with clean contrast.',
+    accent:'#6366f1',
+    swatch:['#ffffff','#eef2ff','#6366f1']
+  }
+];
+
+const PREFERENCES_KEY = 'tacky.preferences.v1';
 
 function SvgIcon({ name, className }) {
   const paths = ICONS[name];
@@ -95,6 +136,25 @@ export default function App(){
   });
   const [isQuickActionsOpen, setQuickActionsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState({ status:'idle', version:null, progress:null, message:null });
+  const [preferences, setPreferences] = useState(()=>{
+    const fallback = { theme:'midnight', reducedMotion:false, focusMode:false };
+    if (typeof window === 'undefined') return fallback;
+    try{
+      const stored = window.localStorage.getItem(PREFERENCES_KEY);
+      if(!stored) return fallback;
+      const parsed = JSON.parse(stored);
+      if(parsed && typeof parsed === 'object'){
+        return {
+          ...fallback,
+          ...parsed,
+          theme: parsed.theme || 'midnight'
+        };
+      }
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  });
   const appVersion = typeof window !== 'undefined' && window?.tacky?.version ? window.tacky.version : '1.0.2';
 
   const applyUpdateStatus = useCallback(partial=>{
@@ -118,6 +178,23 @@ export default function App(){
       setSidebarOpen(false);
     }
   },[route]);
+
+  useEffect(()=>{
+    if (typeof document === 'undefined') return undefined;
+    const nextTheme = preferences.theme || 'midnight';
+    const body = document.body;
+    body.dataset.theme = nextTheme;
+    body.dataset.motion = preferences.reducedMotion ? 'reduced' : 'normal';
+    body.classList.toggle('focus-mode', Boolean(preferences.focusMode));
+    return undefined;
+  },[preferences]);
+
+  useEffect(()=>{
+    if (typeof window === 'undefined') return;
+    try{
+      window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+    } catch {}
+  },[preferences]);
 
   useEffect(()=>{
     setBoards(loadBoards());
@@ -232,6 +309,7 @@ export default function App(){
   const showBoards = ()=> setRoute({ name:'boards' });
   const showNotesDashboard = ()=> setRoute({ name:'notes-dashboard' });
   const showCanvasDashboard = ()=> setRoute({ name:'canvas-dashboard' });
+  const showSettings = ()=> setRoute({ name:'settings' });
   const backHome = ()=> showBoards();
 
   const createBoard = (name, wallpaper)=>{
@@ -242,6 +320,7 @@ export default function App(){
   };
 
   const updateBoard = (board)=> setBoards(prev => prev.map(b => b.id===board.id ? deepClone(board) : b));
+  const renameBoard = (id, name)=> setBoards(prev => prev.map(b => b.id===id ? { ...b, name, updatedAt: Date.now() } : b));
   const deleteBoard = (id)=>{
     setBoards(prev => prev.filter(b => b.id!==id));
     showBoards();
@@ -309,6 +388,9 @@ export default function App(){
       case 'canvas-dashboard':
         showCanvasDashboard();
         break;
+      case 'settings':
+        setRoute({ name:'settings' });
+        break;
       case 'notes':
         setRoute({ name:'notes' });
         break;
@@ -340,6 +422,7 @@ export default function App(){
     if(route.name === 'board' || route.name === 'boards') return 'boards';
     if(route.name === 'notes' || route.name === 'notes-dashboard') return 'notes';
     if(route.name === 'canvas' || route.name === 'canvas-dashboard') return 'canvas';
+    if(route.name === 'settings') return 'settings';
     return 'overview';
   })();
   const activeLabel = (()=> {
@@ -359,6 +442,8 @@ export default function App(){
         return 'Canvas library';
       case 'canvas':
         return 'Canvas workspace';
+      case 'settings':
+        return 'Settings';
       default:
         return 'Workspace';
     }
@@ -396,6 +481,14 @@ export default function App(){
       icon:'canvas',
       isActive: activeCategory==='canvas',
       onClick: showCanvasDashboard
+    },
+    {
+      key:'settings',
+      label:'Settings',
+      hint:'Themes & controls',
+      icon:'palette',
+      isActive: activeCategory==='settings',
+      onClick: showSettings
     }
   ];
 
@@ -584,6 +677,14 @@ export default function App(){
                 <SvgIcon name="sparkle" className="icon-sm" />
                 <span>Quick actions</span>
               </button>
+              <button
+                type="button"
+                className="header-pill ghost"
+                onClick={showSettings}
+              >
+                <SvgIcon name="palette" className="icon-sm" />
+                <span>Settings</span>
+              </button>
               {route.name==='board' && (
                 <button type="button" className="header-pill" onClick={backHome}>
                   <SvgIcon name="arrowLeft" className="icon-sm" />
@@ -706,6 +807,7 @@ export default function App(){
                 boards={boards}
                 onOpen={openBoard}
                 onCreate={createBoard}
+                onRename={renameBoard}
                 onDelete={deleteBoard}
               />
             )}
@@ -721,6 +823,8 @@ export default function App(){
                 notes={notes}
                 onSelect={selectNote}
                 onCreate={()=>createNote('New note')}
+                onUpdateNote={updateNote}
+                onDeleteNote={deleteNote}
               />
             )}
             {route.name==='notes' && (
@@ -748,6 +852,18 @@ export default function App(){
                 canvases={canvases}
                 selectedCanvasId={currentCanvasId}
                 onUpdateCanvas={updateCanvasScene}
+              />
+            )}
+            {route.name==='settings' && (
+              <Settings
+                themes={THEMES}
+                selectedTheme={preferences.theme}
+                onSelectTheme={(id)=>setPreferences(prev=>({ ...prev, theme:id }))}
+                reducedMotion={preferences.reducedMotion}
+                focusMode={preferences.focusMode}
+                onToggleReducedMotion={()=>setPreferences(prev=>({ ...prev, reducedMotion:!prev.reducedMotion }))}
+                onToggleFocusMode={()=>setPreferences(prev=>({ ...prev, focusMode:!prev.focusMode }))}
+                renderIcon={(name, className)=> <SvgIcon name={name} className={className} />}
               />
             )}
           </main>

@@ -5,6 +5,7 @@ const QUICK_LINKS = [
   { key: 'boards', label: 'Boards dashboard', hint: 'Cmd/Ctrl+2', action: 'boards' },
   { key: 'notes', label: 'Notes workspace', hint: 'Cmd/Ctrl+3', action: 'notes-dashboard' },
   { key: 'canvas', label: 'Canvas studio', hint: 'Cmd/Ctrl+4', action: 'canvas-dashboard' },
+  { key: 'settings', label: 'Open settings', hint: 'Cmd/Ctrl+,', action: 'settings' },
 ];
 
 export default function QuickActionsSheet({
@@ -104,7 +105,7 @@ export default function QuickActionsSheet({
           </section>
         </div>
         <footer className="quick-actions-footer">
-          <span>Tip: Press ⌘K or Ctrl+K anytime to open quick actions.</span>
+          <span>Tip: Press Cmd/Ctrl+K anytime to open quick actions.</span>
         </footer>
       </div>
     </div>

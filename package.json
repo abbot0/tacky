@@ -8,7 +8,9 @@
     "dev:watch": "webpack --watch --mode development",
     "dev:electron": "wait-on dist/index.html && cross-env ELECTRON_DISABLE_SECURITY_WARNINGS=1 electron .",
     "build": "webpack --mode production",
-    "dist": "npm run build && electron-builder -w"
+    "dist": "npm run build && electron-builder -w",
+    "release:win": "npm run build && electron-builder --publish always --win nsis",
+    "release": "npm run release:win"
   },
   "build": {
     "appId": "com.tacky.app",
@@ -17,6 +19,13 @@
       "dist/**/*",
       "electron/**/*",
       "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "abbot0",
+        "repo": "tacky"
+      }
     ],
     "win": {
       "target": "nsis",

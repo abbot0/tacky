@@ -1,8 +1,11 @@
 import React, { useMemo, useState } from 'react';
+import Confirm from '../components/Confirm.jsx';
 
-export default function NotesDashboard({ notes, onSelect, onCreate }) {
+export default function NotesDashboard({ notes, onSelect, onCreate, onUpdateNote, onDeleteNote }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('updated');
+  const [editing, setEditing] = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   const items = useMemo(()=>{
     const source = Array.isArray(notes) ? notes.slice() : [];
@@ -19,6 +22,17 @@ export default function NotesDashboard({ notes, onSelect, onCreate }) {
     });
     return sorted;
   },[notes, query, sort]);
+
+  const startEditing = (note)=> setEditing({ id:note.id, value:note.title ?? '' });
+  const commitEditing = ()=>{
+    if(!editing) return;
+    const next = editing.value.trim();
+    if(next && typeof onUpdateNote === 'function'){
+      onUpdateNote({ id: editing.id, title: next, updatedAt: Date.now() });
+    }
+    setEditing(null);
+  };
+  const cancelEditing = ()=> setEditing(null);
 
   return (
     <div className="collection-dashboard">
@@ -66,7 +80,43 @@ export default function NotesDashboard({ notes, onSelect, onCreate }) {
             onClick={()=>onSelect?.(note.id)}
           >
             <header className="collection-card-header">
-              <h3>{note.title || 'Untitled note'}</h3>
+              {editing?.id === note.id ? (
+                <div
+                  className="card-rename"
+                  onClick={event=>event.stopPropagation()}
+                  role="presentation"
+                >
+                  <input
+                    className="card-rename-input"
+                    autoFocus
+                    value={editing.value}
+                    onChange={event=>setEditing(prev=>({ ...prev, value:event.target.value }))}
+                    onBlur={commitEditing}
+                    onKeyDown={event=>{
+                      if(event.key==='Enter'){ event.preventDefault(); commitEditing(); }
+                      if(event.key==='Escape'){ event.preventDefault(); cancelEditing(); }
+                    }}
+                  />
+                </div>
+              ) : (
+                <h3>{note.title || 'Untitled note'}</h3>
+              )}
+              <div className="card-actions-row">
+                <button
+                  type="button"
+                  className="card-action-btn"
+                  onClick={event=>{ event.stopPropagation(); startEditing(note); }}
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  className="card-action-btn danger"
+                  onClick={event=>{ event.stopPropagation(); setConfirm({ id:note.id, title:note.title }); }}
+                >
+                  Delete
+                </button>
+              </div>
             </header>
             <div className="collection-card-body">
               <p>{(note.content ?? '').slice(0,140) || 'No content yet.'}</p>
@@ -85,6 +135,23 @@ export default function NotesDashboard({ notes, onSelect, onCreate }) {
           </div>
         )}
       </div>
+
+      {confirm && (
+        <Confirm
+          title="Delete note?"
+          confirmLabel="Delete note"
+          tone="danger"
+          onCancel={()=>setConfirm(null)}
+          onConfirm={()=>{
+            onDeleteNote?.(confirm.id);
+            setConfirm(null);
+          }}
+        >
+          <div className="confirm-copy">
+            This will permanently remove <strong>{confirm.title || 'this note'}</strong>.
+          </div>
+        </Confirm>
+      )}
     </div>
   );
 }

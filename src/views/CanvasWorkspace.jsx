@@ -11,6 +11,8 @@ export default function CanvasWorkspace({
   const excalidrawAPI = useRef(null);
   const lastSceneRef = useRef(null);
   const syncingRef = useRef(false);
+  const saveTimerRef = useRef(null);
+  const pendingUpdateRef = useRef(null);
   const [editorReady, setEditorReady] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
   const selectedCanvas = useMemo(()=>{
@@ -46,12 +48,20 @@ export default function CanvasWorkspace({
     });
   },[]);
 
+  const flushPendingUpdate = useCallback(()=>{
+    const pending = pendingUpdateRef.current;
+    if(!pending) return;
+    pendingUpdateRef.current = null;
+    lastSceneRef.current = pending.serialized;
+    onUpdateCanvas?.(pending.id, pending.scene);
+  },[onUpdateCanvas]);
+
   useEffect(()=>{
     if(!selectedCanvas || !excalidrawAPI.current || !editorReady) return;
     syncSceneToEditor(selectedCanvas.scene);
   },[selectedCanvas?.id, selectedCanvas?.scene, syncSceneToEditor, editorReady]);
 
-  const handleSceneChange = (elements, appState, files)=>{
+  const handleSceneChange = useCallback((elements, appState, files)=>{
     if(!selectedCanvas) return;
     const mergedFiles = new Map();
     const existingFiles = selectedCanvas.scene?.files;
@@ -85,9 +95,20 @@ export default function CanvasWorkspace({
       if(lastSceneRef.current === serialized) return;
     }
     if(lastSceneRef.current === serialized) return;
-    lastSceneRef.current = serialized;
-    onUpdateCanvas?.(selectedCanvas.id, sanitized);
-  };
+
+    pendingUpdateRef.current = {
+      id: selectedCanvas.id,
+      scene: sanitized,
+      serialized
+    };
+    if(saveTimerRef.current){
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(()=>{
+      flushPendingUpdate();
+      saveTimerRef.current = null;
+    }, 200);
+  },[selectedCanvas, flushPendingUpdate]);
 
   useEffect(()=>{
     if (typeof document === 'undefined' || typeof Element === 'undefined') return undefined;
@@ -111,6 +132,21 @@ export default function CanvasWorkspace({
     proto.requestFullscreen = patched;
     return ()=>{ proto.requestFullscreen = original; };
   },[]);
+
+  useEffect(()=>{
+    flushPendingUpdate();
+    if(saveTimerRef.current){
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  },[selectedCanvas?.id, flushPendingUpdate]);
+
+  useEffect(()=>()=>{
+    if(saveTimerRef.current){
+      clearTimeout(saveTimerRef.current);
+    }
+    flushPendingUpdate();
+  },[flushPendingUpdate]);
 
   return (
     <div className={`canvas-standalone${isZenMode ? ' canvas-zen' : ''}`}>
