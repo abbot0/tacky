@@ -559,7 +559,7 @@ export default function App(){
             </span>
             <div className="nav-brand-copy">
               <span className="nav-brand-title">Tacky Studio</span>
-              <span className="nav-brand-subtitle">Creative control</span>
+              <span className="nav-brand-subtitle">Boards · Notes · Canvas</span>
             </div>
           </div>
           <div className="nav-section">
@@ -571,6 +571,7 @@ export default function App(){
                   key={item.key}
                   className={`nav-link ${item.isActive ? 'is-active' : ''}`}
                   onClick={()=>handleNavSelect(item.onClick)}
+                  title={item.hint}
                   aria-current={item.isActive ? 'page' : undefined}
                 >
                   <span className="nav-link-icon">
@@ -626,7 +627,7 @@ export default function App(){
               <SvgIcon name="menu" />
             </button>
             <div className="header-titles">
-              <span className="header-crumb">Workspace</span>
+              <span className="header-crumb">{route.name==='board' ? 'Boards' : 'Workspace'}</span>
               <h1 className="header-title">{activeLabel}</h1>
             </div>
           </div>
