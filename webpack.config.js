@@ -12,7 +12,7 @@ module.exports = (env = {}, argv = {}) => {
     output: {
       path: path.resolve(__dirname, 'dist'),
       filename: isProd ? '[name].[contenthash:8].renderer.js' : '[name].renderer.js',
-      chunkFilename: isProd ? '[name].[id].[contenthash:8].chunk.js' : '[name].[id].chunk.js',
+      chunkFilename: isProd ? '[name].[contenthash:8].chunk.js' : '[name].chunk.js',
       publicPath: './',
       clean: isProd
     },
@@ -26,7 +26,20 @@ module.exports = (env = {}, argv = {}) => {
     },
     module: {
       rules: [
-        { test:/\.(js|jsx)$/, exclude:/node_modules/, use:'babel-loader' },
+        {
+          test:/\.(js|jsx)$/,
+          exclude:/node_modules/,
+          use:{
+            loader:'babel-loader',
+            options:{
+              cacheDirectory: true,
+              presets:[
+                ['@babel/preset-env', { targets: { electron: '28' }, modules: false }],
+                ['@babel/preset-react', { runtime: 'automatic', development: !isProd }]
+              ]
+            }
+          }
+        },
         { test:/\.css$/i, use:['style-loader','css-loader'] }
       ]
     },
@@ -38,9 +51,26 @@ module.exports = (env = {}, argv = {}) => {
     ],
     optimization: {
       splitChunks: {
-        chunks: 'all'
-      }
+        chunks: 'all',
+        cacheGroups: {
+          excalidraw: {
+            test: /[\/]node_modules[\/](@excalidraw|roughjs|perfect-freehand|pako|fractional-indexing)[\/]/,
+            name: 'excalidraw',
+            chunks: 'all',
+            priority: 20,
+            enforce: true
+          },
+          vendor: {
+            test: /[\/]node_modules[\/]/,
+            name: 'vendor',
+            chunks: 'initial',
+            priority: 10
+          }
+        }
+      },
+      runtimeChunk: 'single'
     },
-    devtool: isProd ? 'source-map' : 'eval-source-map'
+    performance: { hints: false },
+    devtool: isProd ? false : 'eval-cheap-module-source-map'
   };
 };
