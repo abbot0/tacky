@@ -34,7 +34,7 @@ module.exports = (env = {}, argv = {}) => {
             options:{
               cacheDirectory: true,
               presets:[
-                ['@babel/preset-env', { targets: { electron: '28' }, modules: false }],
+                ['@babel/preset-env', { targets: { electron: '44' }, modules: false }],
                 ['@babel/preset-react', { runtime: 'automatic', development: !isProd }]
               ]
             }

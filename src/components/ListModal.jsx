@@ -36,6 +36,8 @@ export default function ListModal({ title = 'Add list', onClose, onSubmit }){
           className="field-input"
           value={listTitle}
           onChange={(event)=>setListTitle(event.target.value)}
+          autoFocus
+          onKeyDown={(event)=>{ if(event.key==="Enter"){ event.preventDefault(); submit(); } }}
           placeholder="To do"
         />
       </div>

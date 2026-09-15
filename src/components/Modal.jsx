@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId } from 'react';
 
 const CloseIcon = ()=>(
   <svg className="icon icon-xs" viewBox="0 0 24 24" aria-hidden="true">
@@ -8,6 +8,12 @@ const CloseIcon = ()=>(
 
 export default function Modal({ title, children, onClose, footer }){
   const headingId = useId();
+
+  useEffect(()=>{
+    const onKey = (event)=>{ if (event.key === 'Escape'){ event.stopPropagation(); onClose?.(); } };
+    window.addEventListener('keydown', onKey, true);
+    return ()=> window.removeEventListener('keydown', onKey, true);
+  },[onClose]);
 
   const handleBackdropClick = (event)=>{
     if(event.target === event.currentTarget){

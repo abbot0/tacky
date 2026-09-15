@@ -5,3 +5,6 @@ releases/
 *.log
 *.DS_Store
 tmp_marker.txt
+.smoke-userdata/
+.smoke.log
+.claude/

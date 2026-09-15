@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Overview from './views/Overview.jsx';
 import BoardsDashboard from './views/Dashboard.jsx';
 import Board from './views/Board.jsx';
@@ -7,225 +7,178 @@ import CanvasWorkspace from './views/CanvasWorkspace.jsx';
 import CanvasDashboard from './views/CanvasDashboard.jsx';
 import NotesDashboard from './views/NotesDashboard.jsx';
 import Settings from './views/Settings.jsx';
-import QuickActionsSheet from './components/QuickActionsSheet.jsx';
+import CommandPalette from './components/CommandPalette.jsx';
+import Toasts from './components/Toasts.jsx';
+import { SvgIcon, THEMES } from './components/icons.jsx';
 import {
-  loadBoards,
+  loadWorkspace,
   saveBoards,
-  defaultBoard,
-  deepClone,
-  loadNotes,
   saveNotes,
-  defaultNote,
-  loadCanvases,
   saveCanvases,
+  flushWrites,
+  defaultBoard,
+  defaultNote,
   defaultCanvas,
-  sanitizeCanvasScene
+  sanitizeCanvasScene,
+  buildSearchIndex,
+  buildBackup,
+  parseBackup,
+  mergeById
 } from './lib.js';
-
-const ICONS = {
-  boards: [
-    'M4 3h6.5a1.5 1.5 0 0 1 1.5 1.5V11H3V4.5A1.5 1.5 0 0 1 4.5 3H4z',
-    'M3 13h9v7H4.5A1.5 1.5 0 0 1 3 18.5V13z',
-    'M13 3h6.5A1.5 1.5 0 0 1 21 4.5V13h-8V3z',
-    'M13 15h8v3.5a1.5 1.5 0 0 1-1.5 1.5H13v-5z'
-  ],
-  notes: [
-    'M6 3h7.5a1.5 1.5 0 0 1 1.06.44l3 3A1.5 1.5 0 0 1 18 7.5V20a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z',
-    'M14 4.56V7h2.44z',
-    'M8 11a1 1 0 0 0 0 2h8a1 1 0 1 0 0-2H8z',
-    'M8 15a1 1 0 0 0 0 2h4a1 1 0 0 0 0-2H8z'
-  ],
-  canvas: [
-    'M5 4h9a1 1 0 0 1 1 1v3h4a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
-    'M12.84 6.3 7.1 16.11a1 1 0 0 0 .38 1.38 1 1 0 0 0 1.38-.37l5.27-9.1a1 1 0 1 0-1.29-1.43z',
-    'M15 18a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-4a1 1 0 0 0-1 1v3z'
-  ],
-  menu: [
-    'M4 6a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z',
-    'M4 12a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z',
-    'M4 18a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z'
-  ],
-  download: [
-    'M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 1.4-1.42L11 12.59V4a1 1 0 0 1 1-1z',
-    'M5 18a1 1 0 0 0 0 2h14a1 1 0 1 0 0-2H5z'
-  ],
-  sparkle: [
-    'M12 3l1.9 4.06L18 8l-4.1 1.06L12 13l-1.9-3.94L6 8l4.1-0.94L12 3z',
-    'M6 17l.95 2.03L9 20l-2.05.52L6 23l-.95-2.48L3 20l2.05-.97L6 17z',
-    'M18 15l1.3 2.6L22 18l-2.69.4L18 21l-.61-2.6L14.7 18l2.69-.4L18 15z'
-  ],
-  alert: [
-    'M12.94 3.34a1 1 0 0 0-1.88 0l-7.5 15.5A1 1 0 0 0 4.44 20h15.12a1 1 0 0 0 .88-1.16l-7.5-15.5zM12 9a1 1 0 0 1 1 1v3.5a1 1 0 1 1-2 0V10a1 1 0 0 1 1-1zm0 8a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 17z'
-  ],
-  arrowLeft: [
-    'M14.7 5.3a1 1 0 0 1 0 1.4L10.41 11H18a1 1 0 1 1 0 2h-7.59l4.3 4.3a1 1 0 0 1-1.42 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.42 0z'
-  ],
-  refresh: [
-    'M19 4.5a1 1 0 0 0-2 0v1.26a7 7 0 0 0-11.64 5.08 1 1 0 0 0 2 0 5 5 0 0 1 8.17-3.8l-1.46 1.46a1 1 0 1 0 1.42 1.42l3.17-3.18a1 1 0 0 0 .29-.7V4.5zM5 19.5a1 1 0 0 0 2 0v-1.26a7 7 0 0 0 11.64-5.08 1 1 0 0 0-2 0 5 5 0 0 1-8.17 3.8l1.46-1.46a1 1 0 0 0-1.42-1.42l-3.17 3.18a1 1 0 0 0-.29.7v1.54z'
-  ],
-  palette: [
-    'M12 3a9 9 0 1 0 0 18h1.35a2.15 2.15 0 0 0 2.05-2.9l-.33-.96a1 1 0 0 1 .95-1.34H17a3 3 0 0 0 1.73-5.46A9.5 9.5 0 0 0 12 3z',
-    'M8 9.5a1.25 1.25 0 1 1-2.5 0A1.25 1.25 0 0 1 8 9.5z',
-    'M12 7a1.25 1.25 0 1 1-2.5 0A1.25 1.25 0 0 1 12 7z',
-    'M15.5 9.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0z',
-    'M13.5 13.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0z'
-  ]
-};
-
-const THEMES = [
-  {
-    id:'midnight',
-    name:'Midnight Dark',
-    description:'The original neon midnight glow.',
-    accent:'#9f7aea',
-    swatch:['#0b1b3a','#121d34','#9f7aea']
-  },
-  {
-    id:'graphite',
-    name:'Graphite Grey',
-    description:'Smoky charcoal with soft edges.',
-    accent:'#22d3ee',
-    swatch:['#0f121a','#1d232f','#22d3ee']
-  },
-  {
-    id:'noir',
-    name:'Noir Black',
-    description:'Pure blacks with crisp cyan highlights.',
-    accent:'#38bdf8',
-    swatch:['#050505','#0f0f0f','#38bdf8']
-  },
-  {
-    id:'light',
-    name:'Lumen Light',
-    description:'Bright, low-glare surfaces with clean contrast.',
-    accent:'#6366f1',
-    swatch:['#ffffff','#eef2ff','#6366f1']
-  }
-];
+import { saveTextFile, openTextFile } from './storage.js';
 
 const PREFERENCES_KEY = 'tacky.preferences.v1';
+const DEFAULT_PREFERENCES = { theme:'midnight', reducedMotion:false, focusMode:false, compactCards:false };
+const NARROW_BREAKPOINT = 1024;
 
-function SvgIcon({ name, className }) {
-  const paths = ICONS[name];
-  if (!paths) return null;
-  const data = Array.isArray(paths) ? paths : [paths];
-  return (
-    <svg
-      className={className ? `icon ${className}` : 'icon'}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {data.map((d, idx) => (
-        <path key={idx} d={d} fill="currentColor" />
-      ))}
-    </svg>
-  );
+function loadPreferences(){
+  if (typeof window === 'undefined') return DEFAULT_PREFERENCES;
+  try{
+    const stored = window.localStorage.getItem(PREFERENCES_KEY);
+    if(!stored) return DEFAULT_PREFERENCES;
+    const parsed = JSON.parse(stored);
+    if(parsed && typeof parsed === 'object'){
+      const theme = THEMES.some(t=>t.id===parsed.theme) ? parsed.theme : 'midnight';
+      return { ...DEFAULT_PREFERENCES, ...parsed, theme };
+    }
+  } catch {}
+  return DEFAULT_PREFERENCES;
 }
 
+const isNarrow = () => typeof window !== 'undefined' && window.innerWidth < NARROW_BREAKPOINT;
+
 export default function App(){
+  const [ready, setReady] = useState(false);
   const [route, setRoute] = useState({ name:'overview' });
   const [boards, setBoards] = useState([]);
   const [notes, setNotes] = useState([]);
   const [canvases, setCanvases] = useState([]);
   const [currentNoteId, setCurrentNoteId] = useState(null);
   const [currentCanvasId, setCurrentCanvasId] = useState(null);
-  const [isSidebarOpen, setSidebarOpen] = useState(()=>{
-    if (typeof window === 'undefined') return true;
-    return window.innerWidth >= 1024;
-  });
-  const [isQuickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [isSidebarOpen, setSidebarOpen] = useState(()=> !isNarrow());
+  const [isPaletteOpen, setPaletteOpen] = useState(false);
+  const [toasts, setToasts] = useState([]);
   const [updateStatus, setUpdateStatus] = useState({ status:'idle', version:null, progress:null, message:null });
-  const [preferences, setPreferences] = useState(()=>{
-    const fallback = { theme:'midnight', reducedMotion:false, focusMode:false };
-    if (typeof window === 'undefined') return fallback;
-    try{
-      const stored = window.localStorage.getItem(PREFERENCES_KEY);
-      if(!stored) return fallback;
-      const parsed = JSON.parse(stored);
-      if(parsed && typeof parsed === 'object'){
-        return {
-          ...fallback,
-          ...parsed,
-          theme: parsed.theme || 'midnight'
-        };
-      }
-      return fallback;
-    } catch {
-      return fallback;
-    }
-  });
-  const appVersion = typeof window !== 'undefined' && window?.tacky?.version ? window.tacky.version : '1.0.2';
+  const [preferences, setPreferences] = useState(loadPreferences);
+  const appVersion = (typeof window !== 'undefined' && window.tacky?.version) || '1.1.0';
 
-  const applyUpdateStatus = useCallback(partial=>{
-    setUpdateStatus(prev => ({ ...prev, ...partial }));
+  // -------------------------------------------------------------------------
+  // Toasts (used for undo-able deletes and import/export feedback)
+  // -------------------------------------------------------------------------
+  const toastTimers = useRef(new Map());
+  const dismissToast = useCallback((id)=>{
+    const timer = toastTimers.current.get(id);
+    if (timer){ clearTimeout(timer); toastTimers.current.delete(id); }
+    setToasts(prev => prev.filter(t => t.id !== id));
+  },[]);
+  const pushToast = useCallback(({ message, actionLabel, onAction, tone='default', duration=6000 })=>{
+    const id = `t_${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}`;
+    setToasts(prev => [...prev.slice(-3), { id, message, actionLabel, onAction, tone }]);
+    const timer = setTimeout(()=> dismissToast(id), duration);
+    toastTimers.current.set(id, timer);
+    return id;
+  },[dismissToast]);
+  useEffect(()=>()=>{ toastTimers.current.forEach(clearTimeout); },[]);
+
+  // Latest collections, readable from callbacks without re-creating them.
+  const latest = useRef({ boards, notes, canvases });
+  latest.current = { boards, notes, canvases };
+
+  /** Remove item `id` from a collection and offer to put it back. */
+  const removeWithUndo = useCallback((collection, setter, id, label)=>{
+    const items = latest.current[collection];
+    const index = items.findIndex(item => item.id === id);
+    if (index === -1) return false;
+    const removed = items[index];
+    setter(prev => prev.filter(item => item.id !== id));
+    pushToast({
+      message: `Deleted ${label} “${removed.name ?? removed.title}”`,
+      actionLabel: 'Undo',
+      onAction: ()=> setter(cur => cur.some(item => item.id === id)
+        ? cur
+        : [...cur.slice(0, Math.min(index, cur.length)), removed, ...cur.slice(Math.min(index, cur.length))])
+    });
+    return true;
+  },[pushToast]);
+
+  // -------------------------------------------------------------------------
+  // Load + persist
+  // -------------------------------------------------------------------------
+  useEffect(()=>{
+    let cancelled = false;
+    loadWorkspace().then(data=>{
+      if (cancelled) return;
+      setBoards(data.boards);
+      setCanvases(data.canvases);
+      if (data.notes.length){
+        setNotes(data.notes);
+      } else {
+        const starter = defaultNote('Welcome to Notes', [
+          '# Welcome!',
+          '',
+          'Start capturing ideas in the editor. Notes support **Markdown** — toggle the preview to see it rendered.',
+          '',
+          '- Press `Ctrl+K` to search everything.',
+          '- Add #tags from the toolbar to organise notes.',
+          '- [ ] Task lists work too.',
+          '- Everything saves automatically.'
+        ].join('\n'));
+        setNotes([starter]);
+        setCurrentNoteId(starter.id);
+      }
+      setReady(true);
+    }).catch(err=>{
+      console.error('Failed to load workspace', err);
+      setReady(true);
+    });
+    return ()=>{ cancelled = true; };
   },[]);
 
+  useEffect(()=>{ if (ready) saveBoards(boards); },[ready, boards]);
+  useEffect(()=>{ if (ready) saveNotes(notes); },[ready, notes]);
+  useEffect(()=>{ if (ready) saveCanvases(canvases); },[ready, canvases]);
+
   useEffect(()=>{
-    if (typeof window === 'undefined') return undefined;
-    const handleResize = ()=>{
-      if (window.innerWidth >= 1024){
-        setSidebarOpen(true);
-      }
-    };
+    if (typeof document === 'undefined') return;
+    const body = document.body;
+    body.dataset.theme = preferences.theme || 'midnight';
+    body.dataset.motion = preferences.reducedMotion ? 'reduced' : 'normal';
+    body.classList.toggle('focus-mode', Boolean(preferences.focusMode));
+    body.classList.toggle('compact-cards', Boolean(preferences.compactCards));
+  },[preferences]);
+
+  useEffect(()=>{
+    try{ window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences)); } catch {}
+  },[preferences]);
+
+  // -------------------------------------------------------------------------
+  // Layout
+  // -------------------------------------------------------------------------
+  useEffect(()=>{
+    const handleResize = ()=>{ if (!isNarrow()) setSidebarOpen(true); };
     window.addEventListener('resize', handleResize);
     return ()=> window.removeEventListener('resize', handleResize);
   },[]);
 
   useEffect(()=>{
-    if (typeof window === 'undefined') return;
-    if (window.innerWidth < 1024){
-      setSidebarOpen(false);
-    }
-  },[route]);
+    if (isNarrow()) setSidebarOpen(false);
+  },[route.name, route.id]);
 
   useEffect(()=>{
-    if (typeof document === 'undefined') return undefined;
-    const nextTheme = preferences.theme || 'midnight';
-    const body = document.body;
-    body.dataset.theme = nextTheme;
-    body.dataset.motion = preferences.reducedMotion ? 'reduced' : 'normal';
-    body.classList.toggle('focus-mode', Boolean(preferences.focusMode));
-    return undefined;
-  },[preferences]);
+    document.body.classList.toggle('quick-actions-open', isPaletteOpen);
+    return ()=> document.body.classList.remove('quick-actions-open');
+  },[isPaletteOpen]);
 
-  useEffect(()=>{
-    if (typeof window === 'undefined') return;
-    try{
-      window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
-    } catch {}
-  },[preferences]);
-
-  useEffect(()=>{
-    setBoards(loadBoards());
-
-    const loadedNotes = loadNotes();
-    if (loadedNotes.length){
-      setNotes(loadedNotes);
-    } else {
-      const starter = defaultNote('Welcome to Notes', [
-        '# Welcome!',
-        '',
-        'Start capturing ideas in the editor below.',
-        '',
-        '- Use the + tab to create more notes.',
-        '- Rename a tab by changing the title field.',
-        '- Everything saves automatically.'
-      ].join('\n'));
-      setNotes([starter]);
-      setCurrentNoteId(starter.id);
-    }
-
-    setCanvases(loadCanvases());
+  // -------------------------------------------------------------------------
+  // Updates
+  // -------------------------------------------------------------------------
+  const applyUpdateStatus = useCallback(partial=>{
+    setUpdateStatus(prev => ({ ...prev, ...partial }));
   },[]);
-
-  useEffect(()=>{ saveBoards(boards); },[boards]);
-  useEffect(()=>{ saveNotes(notes); },[notes]);
-  useEffect(()=>{ saveCanvases(canvases); },[canvases]);
 
   useEffect(()=>{
     const api = window?.tacky;
-    if(!api) return undefined;
+    if(!api?.checkForUpdates) return undefined;
 
     applyUpdateStatus({ status:'checking', message:null, progress:null });
 
@@ -237,46 +190,29 @@ export default function App(){
     };
 
     addListener(api.onUpdateAvailable, info=>{
-      applyUpdateStatus({
-        status:'available',
-        version: info?.version ?? null,
-        message:null,
-        progress:null
-      });
+      applyUpdateStatus({ status:'available', version: info?.version ?? null, message:null, progress:null });
     });
-
     addListener(api.onUpdateProgress, progress=>{
       applyUpdateStatus({
         status:'downloading',
-        progress:{
-          percent: Math.round(progress?.percent ?? 0),
-          bytesPerSecond: progress?.bytesPerSecond ?? 0
-        },
+        progress:{ percent: Math.round(progress?.percent ?? 0), bytesPerSecond: progress?.bytesPerSecond ?? 0 },
         message:null
       });
     });
-
     addListener(api.onUpdateDownloaded, info=>{
-      applyUpdateStatus({
-        status:'downloaded',
-        version: info?.version ?? null,
-        progress:null
-      });
+      applyUpdateStatus({ status:'downloaded', version: info?.version ?? null, progress:null });
     });
-
     addListener(api.onUpdateError, error=>{
-      applyUpdateStatus({
-        status:'error',
-        message: error?.message ?? 'Something went wrong while fetching the update.',
-        progress:null
-      });
+      applyUpdateStatus({ status:'error', message: error?.message ?? 'Something went wrong while fetching the update.', progress:null });
     });
-
     addListener(api.onUpdateNotAvailable, ()=>{
       applyUpdateStatus({ status:'idle', progress:null, message:null });
     });
 
-    api.checkForUpdates?.().catch(err=>{
+    api.checkForUpdates().then(result=>{
+      if (result?.skipped) applyUpdateStatus({ status:'idle' });
+      else if (result?.error) applyUpdateStatus({ status:'error', message: result.error });
+    }).catch(err=>{
       applyUpdateStatus({ status:'error', message: err?.message ?? 'Unable to check for updates.' });
     });
 
@@ -291,129 +227,263 @@ export default function App(){
       applyUpdateStatus({ status:'error', message: err?.message ?? 'Failed to download the update.', progress:null });
     });
   };
-
-  const installUpdate = ()=>{
-    window?.tacky?.installUpdate?.();
-  };
-
+  const installUpdate = ()=>{ flushWrites().finally(()=> window?.tacky?.installUpdate?.()); };
   const retryCheck = ()=>{
     const api = window?.tacky;
     if(!api?.checkForUpdates) return;
     applyUpdateStatus({ status:'checking', message:null, progress:null });
-    api.checkForUpdates().catch(err=>{
+    api.checkForUpdates().then(result=>{
+      if (result?.skipped) applyUpdateStatus({ status:'idle' });
+      else if (result?.error) applyUpdateStatus({ status:'error', message: result.error });
+    }).catch(err=>{
       applyUpdateStatus({ status:'error', message: err?.message ?? 'Unable to check for updates.' });
     });
   };
 
-  const openBoard = (id)=> setRoute({ name:'board', id });
-  const showBoards = ()=> setRoute({ name:'boards' });
-  const showNotesDashboard = ()=> setRoute({ name:'notes-dashboard' });
-  const showCanvasDashboard = ()=> setRoute({ name:'canvas-dashboard' });
-  const showSettings = ()=> setRoute({ name:'settings' });
-  const backHome = ()=> showBoards();
+  // -------------------------------------------------------------------------
+  // Navigation
+  // -------------------------------------------------------------------------
+  const showOverview = useCallback(()=> setRoute({ name:'overview' }),[]);
+  const showBoards = useCallback(()=> setRoute({ name:'boards' }),[]);
+  const showNotesDashboard = useCallback(()=> setRoute({ name:'notes-dashboard' }),[]);
+  const showCanvasDashboard = useCallback(()=> setRoute({ name:'canvas-dashboard' }),[]);
+  const showSettings = useCallback(()=> setRoute({ name:'settings' }),[]);
+  const openBoard = useCallback((id, cardId)=> setRoute({ name:'board', id, cardId: cardId ?? null }),[]);
 
-  const createBoard = (name, wallpaper)=>{
+  // -------------------------------------------------------------------------
+  // Boards
+  // -------------------------------------------------------------------------
+  const createBoard = useCallback((name, wallpaper)=>{
     const b = defaultBoard(name);
     if (wallpaper) b.wallpaper = wallpaper;
     setBoards(prev => [b, ...prev]);
     setRoute({ name:'board', id:b.id });
-  };
+  },[]);
 
-  const updateBoard = (board)=> setBoards(prev => prev.map(b => b.id===board.id ? deepClone(board) : b));
-  const renameBoard = (id, name)=> setBoards(prev => prev.map(b => b.id===id ? { ...b, name, updatedAt: Date.now() } : b));
-  const deleteBoard = (id)=>{
-    setBoards(prev => prev.filter(b => b.id!==id));
-    showBoards();
-  };
+  const updateBoard = useCallback((board)=>{
+    setBoards(prev => prev.map(b => b.id===board.id ? board : b));
+  },[]);
 
-  const createNote = (title)=>{
+  const renameBoard = useCallback((id, name)=>{
+    setBoards(prev => prev.map(b => b.id===id ? { ...b, name, updatedAt: Date.now() } : b));
+  },[]);
+
+  const duplicateBoard = useCallback((id)=>{
+    setBoards(prev => {
+      const source = prev.find(b=>b.id===id);
+      if (!source) return prev;
+      const copy = defaultBoard(`${source.name} copy`);
+      copy.wallpaper = source.wallpaper;
+      copy.lists = source.lists.map(list => ({
+        ...list,
+        id: `l_${Math.random().toString(36).slice(2,10)}`,
+        cards: list.cards.map(card => ({ ...card, id: `c_${Math.random().toString(36).slice(2,10)}` }))
+      }));
+      const index = prev.indexOf(source);
+      const next = prev.slice();
+      next.splice(index + 1, 0, copy);
+      return next;
+    });
+  },[]);
+
+  const deleteBoard = useCallback((id)=>{
+    removeWithUndo('boards', setBoards, id, 'board');
+    setRoute(cur => (cur.name==='board' && cur.id===id) ? { name:'boards' } : cur);
+  },[removeWithUndo]);
+
+  // -------------------------------------------------------------------------
+  // Notes
+  // -------------------------------------------------------------------------
+  const createNote = useCallback((title)=>{
     const note = defaultNote(title && title.trim().length ? title.trim() : 'Untitled note');
     setNotes(prev => [note, ...prev]);
     setCurrentNoteId(note.id);
     setRoute({ name:'notes' });
-  };
+  },[]);
 
-  const updateNote = (nextNote)=>{
+  const updateNote = useCallback((nextNote)=>{
     if(!nextNote?.id) return;
     setNotes(prev => prev.map(n => n.id===nextNote.id ? { ...n, ...nextNote } : n));
-  };
+  },[]);
 
-  const deleteNote = (id)=>{
-    setNotes(prev => prev.filter(n => n.id!==id));
-    if(currentNoteId===id) setCurrentNoteId(null);
-  };
+  const deleteNote = useCallback((id)=>{
+    removeWithUndo('notes', setNotes, id, 'note');
+    setCurrentNoteId(cur => (cur===id ? null : cur));
+  },[removeWithUndo]);
 
-  const selectNote = (id)=>{
+  const selectNote = useCallback((id)=>{
     setCurrentNoteId(id);
     setRoute({ name:'notes' });
-  };
+  },[]);
 
-  const createCanvas = (name)=>{
+  // -------------------------------------------------------------------------
+  // Canvases
+  // -------------------------------------------------------------------------
+  const createCanvas = useCallback((name)=>{
     const canvas = defaultCanvas(name && name.trim().length ? name.trim() : 'Untitled canvas');
     setCanvases(prev => [canvas, ...prev]);
     setCurrentCanvasId(canvas.id);
     setRoute({ name:'canvas' });
-  };
+  },[]);
 
-  const selectCanvas = (id)=>{
+  const selectCanvas = useCallback((id)=>{
     setCurrentCanvasId(id);
     setRoute({ name:'canvas' });
-  };
+  },[]);
 
-  const deleteCanvas = (id)=>{
-    setCanvases(prev => prev.filter(c=>c.id!==id));
-    if(currentCanvasId===id) setCurrentCanvasId(null);
-  };
+  const deleteCanvas = useCallback((id)=>{
+    removeWithUndo('canvases', setCanvases, id, 'canvas');
+    setCurrentCanvasId(cur => (cur===id ? null : cur));
+  },[removeWithUndo]);
 
-  const renameCanvas = (id, name)=>{
+  const renameCanvas = useCallback((id, name)=>{
     setCanvases(prev => prev.map(canvas => canvas.id===id ? { ...canvas, name, updatedAt: Date.now() } : canvas));
-  };
+  },[]);
 
-  const updateCanvasScene = (id, scene)=>{
+  const updateCanvasScene = useCallback((id, scene)=>{
     const safeScene = sanitizeCanvasScene(scene);
     setCanvases(prev => prev.map(canvas => canvas.id===id ? { ...canvas, scene: safeScene, updatedAt: Date.now() } : canvas));
-  };
+  },[]);
+
+  // -------------------------------------------------------------------------
+  // Backup / restore
+  // -------------------------------------------------------------------------
+  const exportBackup = useCallback(async ()=>{
+    const stamp = new Date().toISOString().slice(0,10);
+    const payload = buildBackup({ boards, notes, canvases, preferences });
+    try{
+      const result = await saveTextFile({
+        defaultName:`tacky-backup-${stamp}.json`,
+        contents: JSON.stringify(payload),
+        filters:[{ name:'Tacky backup', extensions:['json'] }]
+      });
+      if (!result?.canceled) pushToast({ message:'Backup saved.', tone:'success' });
+    } catch (err){
+      pushToast({ message:`Backup failed: ${err?.message ?? err}`, tone:'danger' });
+    }
+  },[boards, notes, canvases, preferences, pushToast]);
+
+  const importBackup = useCallback(async (mode='merge')=>{
+    try{
+      const result = await openTextFile({ filters:[{ name:'Tacky backup', extensions:['json'] }] });
+      if (result?.canceled) return;
+      const data = parseBackup(result.contents);
+      if (mode === 'replace'){
+        setBoards(data.boards);
+        setNotes(data.notes);
+        setCanvases(data.canvases);
+      } else {
+        setBoards(prev => mergeById(prev, data.boards));
+        setNotes(prev => mergeById(prev, data.notes));
+        setCanvases(prev => mergeById(prev, data.canvases));
+      }
+      if (data.preferences) setPreferences(prev => ({ ...prev, ...data.preferences }));
+      pushToast({
+        message:`Restored ${data.boards.length} boards, ${data.notes.length} notes, ${data.canvases.length} canvases.`,
+        tone:'success'
+      });
+    } catch (err){
+      pushToast({ message:`Import failed: ${err?.message ?? err}`, tone:'danger' });
+    }
+  },[pushToast]);
+
+  const clearWorkspace = useCallback(()=>{
+    setBoards([]);
+    setNotes([]);
+    setCanvases([]);
+    setCurrentNoteId(null);
+    setCurrentCanvasId(null);
+    setRoute({ name:'overview' });
+    pushToast({ message:'Workspace cleared.' });
+  },[pushToast]);
+
+  // -------------------------------------------------------------------------
+  // Search + palette
+  // -------------------------------------------------------------------------
+  const searchIndexData = useMemo(()=> buildSearchIndex({ boards, notes, canvases }),[boards, notes, canvases]);
+
+  const openSearchResult = useCallback((item)=>{
+    switch(item.type){
+      case 'board': openBoard(item.id); break;
+      case 'card': openBoard(item.boardId, item.id); break;
+      case 'note': selectNote(item.id); break;
+      case 'canvas': selectCanvas(item.id); break;
+      default: break;
+    }
+  },[openBoard, selectNote, selectCanvas]);
 
   const navigateQuick = useCallback((target)=>{
     switch(target){
-      case 'overview':
-        setRoute({ name:'overview' });
-        break;
-      case 'boards':
-        showBoards();
-        break;
-      case 'notes-dashboard':
-        showNotesDashboard();
-        break;
-      case 'canvas-dashboard':
-        showCanvasDashboard();
-        break;
-      case 'settings':
-        setRoute({ name:'settings' });
-        break;
-      case 'notes':
-        setRoute({ name:'notes' });
-        break;
-      case 'canvas':
-        setRoute({ name:'canvas' });
-        break;
-      default:
-        break;
+      case 'overview': showOverview(); break;
+      case 'boards': showBoards(); break;
+      case 'notes-dashboard': showNotesDashboard(); break;
+      case 'canvas-dashboard': showCanvasDashboard(); break;
+      case 'settings': showSettings(); break;
+      case 'notes': setRoute({ name:'notes' }); break;
+      case 'canvas': setRoute({ name:'canvas' }); break;
+      default: break;
     }
-  },[showBoards, showNotesDashboard, showCanvasDashboard]);
+  },[showOverview, showBoards, showNotesDashboard, showCanvasDashboard, showSettings]);
+
+  const createInContext = useCallback(()=>{
+    switch(route.name){
+      case 'boards': case 'board': createBoard('New board'); break;
+      case 'canvas': case 'canvas-dashboard': createCanvas('New canvas'); break;
+      default: createNote('New note'); break;
+    }
+  },[route.name, createBoard, createCanvas, createNote]);
+
+  const paletteCommands = useMemo(()=>[
+    { id:'new-board', label:'New board', hint:'Create', run:()=>createBoard('New board') },
+    { id:'new-note', label:'New note', hint:'Create', run:()=>createNote('New note') },
+    { id:'new-canvas', label:'New canvas', hint:'Create', run:()=>createCanvas('New canvas') },
+    { id:'go-overview', label:'Go to overview', hint:'Ctrl+1', run:showOverview },
+    { id:'go-boards', label:'Go to boards', hint:'Ctrl+2', run:showBoards },
+    { id:'go-notes', label:'Go to notes', hint:'Ctrl+3', run:showNotesDashboard },
+    { id:'go-canvas', label:'Go to canvases', hint:'Ctrl+4', run:showCanvasDashboard },
+    { id:'go-settings', label:'Open settings', hint:'Ctrl+,', run:showSettings },
+    { id:'toggle-sidebar', label:'Toggle sidebar', hint:'Ctrl+B', run:()=>setSidebarOpen(v=>!v) },
+    { id:'toggle-focus', label: preferences.focusMode ? 'Disable focus mode' : 'Enable focus mode', hint:'Comfort', run:()=>setPreferences(p=>({ ...p, focusMode:!p.focusMode })) },
+    ...THEMES.map(theme => ({ id:`theme-${theme.id}`, label:`Theme: ${theme.name}`, hint:'Appearance', run:()=>setPreferences(p=>({ ...p, theme:theme.id })) })),
+    { id:'export-backup', label:'Export backup', hint:'Data', run:exportBackup },
+    { id:'import-backup', label:'Import backup (merge)', hint:'Data', run:()=>importBackup('merge') }
+  ],[createBoard, createNote, createCanvas, showOverview, showBoards, showNotesDashboard, showCanvasDashboard, showSettings, preferences.focusMode, exportBackup, importBackup]);
+
+  // -------------------------------------------------------------------------
+  // Keyboard shortcuts
+  // -------------------------------------------------------------------------
+  const shortcutRefs = useRef({});
+  shortcutRefs.current = { navigateQuick, createInContext };
 
   useEffect(()=>{
-    if(route.name==='notes' && !currentNoteId && notes.length){
-      setCurrentNoteId(notes[0].id);
-    }
-  },[route, currentNoteId, notes]);
+    const handler = (event)=>{
+      const key = event.key?.toLowerCase?.() ?? '';
+      const mod = event.metaKey || event.ctrlKey;
+      if (key === 'escape'){ setPaletteOpen(false); return; }
+      if (!mod) return;
+      const { navigateQuick: nav, createInContext: create } = shortcutRefs.current;
+      const routes = { '1':'overview', '2':'boards', '3':'notes-dashboard', '4':'canvas-dashboard', '5':'settings', ',':'settings' };
+      if (key === 'k'){ event.preventDefault(); setPaletteOpen(prev => !prev); return; }
+      if (routes[key]){ event.preventDefault(); nav(routes[key]); return; }
+      if (key === 'b' && !event.shiftKey){ event.preventDefault(); setSidebarOpen(prev => !prev); return; }
+      if (key === 'n' && !event.shiftKey){ event.preventDefault(); create(); }
+    };
+    window.addEventListener('keydown', handler);
+    return ()=> window.removeEventListener('keydown', handler);
+  },[]);
 
+  // Keep a note / canvas selected when entering those workspaces.
   useEffect(()=>{
-    if(route.name==='canvas' && !currentCanvasId && canvases.length){
-      setCurrentCanvasId(canvases[0].id);
-    }
-  },[route, currentCanvasId, canvases]);
+    if(route.name==='notes' && !currentNoteId && notes.length) setCurrentNoteId(notes[0].id);
+  },[route.name, currentNoteId, notes]);
+  useEffect(()=>{
+    if(route.name==='canvas' && !currentCanvasId && canvases.length) setCurrentCanvasId(canvases[0].id);
+  },[route.name, currentCanvasId, canvases]);
 
+  // -------------------------------------------------------------------------
+  // Derived UI state
+  // -------------------------------------------------------------------------
+  const activeBoard = route.name==='board' ? boards.find(b=>b.id===route.id) : null;
   const shouldShowBanner = ['available','downloading','downloaded','error'].includes(updateStatus.status)
     && isSidebarOpen
     && !['notes','canvas'].includes(route.name);
@@ -426,141 +496,57 @@ export default function App(){
     return 'overview';
   })();
   const activeLabel = (()=> {
-    if(route.name === 'board'){
-      return boards.find(b=>b.id===route.id)?.name ?? 'Board';
-    }
+    if(route.name === 'board') return activeBoard?.name ?? 'Board';
     switch(route.name){
-      case 'overview':
-        return 'Overview';
-      case 'boards':
-        return 'Boards';
-      case 'notes-dashboard':
-        return 'Notes';
-      case 'notes':
-        return 'Notes workspace';
-      case 'canvas-dashboard':
-        return 'Canvas library';
-      case 'canvas':
-        return 'Canvas workspace';
-      case 'settings':
-        return 'Settings';
-      default:
-        return 'Workspace';
+      case 'overview': return 'Overview';
+      case 'boards': return 'Boards';
+      case 'notes-dashboard': return 'Notes';
+      case 'notes': return 'Notes workspace';
+      case 'canvas-dashboard': return 'Canvas library';
+      case 'canvas': return 'Canvas workspace';
+      case 'settings': return 'Settings';
+      default: return 'Workspace';
     }
   })();
 
   const sidebarLinks = [
-    {
-      key:'overview',
-      label:'Overview',
-      hint:'Home base',
-      icon:'sparkle',
-      isActive: activeCategory==='overview',
-      onClick: ()=> setRoute({ name:'overview' })
-    },
-    {
-      key:'boards',
-      label:'Boards',
-      hint:'Plan projects',
-      icon:'boards',
-      isActive: activeCategory==='boards',
-      onClick: showBoards
-    },
-    {
-      key:'notes',
-      label:'Notes',
-      hint:'Capture ideas',
-      icon:'notes',
-      isActive: activeCategory==='notes',
-      onClick: showNotesDashboard
-    },
-    {
-      key:'canvas',
-      label:'Canvas',
-      hint:'Sketch freely',
-      icon:'canvas',
-      isActive: activeCategory==='canvas',
-      onClick: showCanvasDashboard
-    },
-    {
-      key:'settings',
-      label:'Settings',
-      hint:'Themes & controls',
-      icon:'palette',
-      isActive: activeCategory==='settings',
-      onClick: showSettings
-    }
+    { key:'overview', label:'Overview', hint:'Home base', icon:'sparkle', isActive: activeCategory==='overview', onClick: showOverview },
+    { key:'boards', label:'Boards', hint:'Plan projects', icon:'boards', isActive: activeCategory==='boards', onClick: showBoards },
+    { key:'notes', label:'Notes', hint:'Capture ideas', icon:'notes', isActive: activeCategory==='notes', onClick: showNotesDashboard },
+    { key:'canvas', label:'Canvas', hint:'Sketch freely', icon:'canvas', isActive: activeCategory==='canvas', onClick: showCanvasDashboard },
+    { key:'settings', label:'Settings', hint:'Themes & data', icon:'palette', isActive: activeCategory==='settings', onClick: showSettings }
   ];
 
-  const openQuickActions = useCallback(()=> setQuickActionsOpen(true),[]);
-  const closeQuickActions = useCallback(()=> setQuickActionsOpen(false),[]);
+  const openPalette = useCallback(()=> setPaletteOpen(true),[]);
+  const closePalette = useCallback(()=> setPaletteOpen(false),[]);
 
   const handleNavSelect = useCallback((handler)=>{
-    if (typeof handler === 'function'){
-      handler();
-    }
-    closeQuickActions();
-    if (typeof window !== 'undefined' && window.innerWidth < 1024){
-      setSidebarOpen(false);
-    }
-  },[closeQuickActions]);
+    if (typeof handler === 'function') handler();
+    closePalette();
+    if (isNarrow()) setSidebarOpen(false);
+  },[closePalette]);
 
   const footerStatus = (()=> {
     switch(updateStatus.status){
-      case 'checking':
-        return 'Checking for updates...';
-      case 'available':
-        return updateStatus.version ? `v${updateStatus.version} ready` : 'Update available';
-      case 'downloading':
-        return `Downloading... ${percent}%`;
-      case 'downloaded':
-        return 'Ready to install';
-      case 'error':
-        return 'Update unavailable';
-      default:
-      return 'You are up to date';
+      case 'checking': return 'Checking for updates...';
+      case 'available': return updateStatus.version ? `v${updateStatus.version} ready` : 'Update available';
+      case 'downloading': return `Downloading... ${percent}%`;
+      case 'downloaded': return 'Ready to install';
+      case 'error': return 'Update unavailable';
+      default: return 'You are up to date';
     }
   })();
 
   const toggleSidebar = ()=> setSidebarOpen(prev => !prev);
 
-  useEffect(()=>{
-    if (typeof window === 'undefined') return;
-    if (window.innerWidth < 1280){
-      setSidebarOpen(false);
-    }
-  },[route?.name, route?.id]);
-
-  useEffect(()=>{
-    if (typeof document === 'undefined') return undefined;
-    const cls = document.body.classList;
-    if (isQuickActionsOpen){
-      cls.add('quick-actions-open');
-    } else {
-      cls.remove('quick-actions-open');
-    }
-    return ()=> cls.remove('quick-actions-open');
-  },[isQuickActionsOpen]);
-
-  useEffect(()=>{
-    if (typeof window === 'undefined') return undefined;
-    const handler = (event)=>{
-      const key = event.key?.toLowerCase?.() ?? '';
-      const isModifier = event.metaKey || event.ctrlKey;
-      const tag = (event.target?.tagName ?? '').toLowerCase();
-      const isFormField = ['input','textarea','select'].includes(tag) || event.target?.isContentEditable;
-      if (isModifier && key === 'k'){
-        if (isFormField) return;
-        event.preventDefault();
-        setQuickActionsOpen(prev => !prev);
-      }
-      if (key === 'escape'){
-        setQuickActionsOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return ()=> window.removeEventListener('keydown', handler);
-  },[]);
+  if (!ready){
+    return (
+      <div className="app-loading" role="status" aria-live="polite">
+        <span className="app-loading-spinner" aria-hidden="true" />
+        <span>Loading your workspace…</span>
+      </div>
+    );
+  }
 
   return (
     <div className={`app-frame ${isSidebarOpen ? 'nav-open' : 'nav-collapsed'}`}>
@@ -608,12 +594,7 @@ export default function App(){
             </div>
           </div>
           <div className="nav-compact-actions">
-            <button
-              type="button"
-              onClick={openQuickActions}
-              title="Quick actions"
-              aria-label="Open quick actions"
-            >
+            <button type="button" onClick={openPalette} title="Search & commands (Ctrl+K)" aria-label="Open command palette">
               <span className="nav-compact-icon">+</span>
             </button>
           </div>
@@ -626,11 +607,7 @@ export default function App(){
               <span className="nav-footer-label">Version</span>
               <span className="nav-footer-value">v{appVersion}</span>
             </div>
-            <button
-              type="button"
-              className="nav-footer-btn"
-              onClick={retryCheck}
-            >
+            <button type="button" className="nav-footer-btn" onClick={retryCheck}>
               <SvgIcon name="refresh" className="nav-footer-icon" />
               <span>{updateStatus.status === 'checking' ? 'Checking...' : 'Check updates'}</span>
             </button>
@@ -644,7 +621,7 @@ export default function App(){
               type="button"
               className="nav-trigger"
               onClick={toggleSidebar}
-              title={isSidebarOpen ? 'Hide navigation' : 'Show navigation'}
+              title={isSidebarOpen ? 'Hide navigation (Ctrl+B)' : 'Show navigation (Ctrl+B)'}
             >
               <SvgIcon name="menu" />
             </button>
@@ -654,6 +631,11 @@ export default function App(){
             </div>
           </div>
           <div className="header-right">
+            <button type="button" className="header-search" onClick={openPalette} aria-label="Search everything">
+              <SvgIcon name="search" className="icon-sm" />
+              <span className="header-search-label">Search everything…</span>
+              <kbd>Ctrl K</kbd>
+            </button>
             <div className="header-counters">
               <div className="header-counter">
                 <span className="header-counter-value">{boards.length}</span>
@@ -669,44 +651,20 @@ export default function App(){
               </div>
             </div>
             <div className="header-controls">
-              <button
-                type="button"
-                className="header-pill ghost quick-actions-trigger"
-                onClick={openQuickActions}
-              >
-                <SvgIcon name="sparkle" className="icon-sm" />
-                <span>Quick actions</span>
-              </button>
-              <button
-                type="button"
-                className="header-pill ghost"
-                onClick={showSettings}
-              >
-                <SvgIcon name="palette" className="icon-sm" />
-                <span>Settings</span>
-              </button>
               {route.name==='board' && (
-                <button type="button" className="header-pill" onClick={backHome}>
+                <button type="button" className="header-pill" onClick={showBoards}>
                   <SvgIcon name="arrowLeft" className="icon-sm" />
                   <span>Back to boards</span>
                 </button>
               )}
               {updateStatus.status === 'available' && (
-                <button
-                  type="button"
-                  className="header-pill accent"
-                  onClick={startDownload}
-                >
+                <button type="button" className="header-pill accent" onClick={startDownload}>
                   <SvgIcon name="download" className="icon-sm" />
                   <span>Download update</span>
                 </button>
               )}
               {updateStatus.status === 'downloaded' && (
-                <button
-                  type="button"
-                  className="header-pill accent"
-                  onClick={installUpdate}
-                >
+                <button type="button" className="header-pill accent" onClick={installUpdate}>
                   <SvgIcon name="sparkle" className="icon-sm" />
                   <span>Install update</span>
                 </button>
@@ -718,25 +676,15 @@ export default function App(){
           <div className={`system-banner system-banner-${updateStatus.status}`}>
             <div className="system-banner-icon">
               <SvgIcon
-                name={
-                  updateStatus.status === 'error'
-                    ? 'alert'
-                    : updateStatus.status === 'downloading'
-                      ? 'download'
-                      : 'sparkle'
-                }
+                name={updateStatus.status === 'error' ? 'alert' : updateStatus.status === 'downloading' ? 'download' : 'sparkle'}
                 className="banner-icon"
               />
             </div>
             <div className="system-banner-copy">
               {updateStatus.status === 'available' && (
                 <>
-                  <p className="banner-title">
-                    Update{updateStatus.version ? ` ${updateStatus.version}` : ''} is ready.
-                  </p>
-                  <p className="banner-subtitle">
-                    Grab the latest improvements when it suits you.
-                  </p>
+                  <p className="banner-title">Update{updateStatus.version ? ` ${updateStatus.version}` : ''} is ready.</p>
+                  <p className="banner-subtitle">Grab the latest improvements when it suits you.</p>
                 </>
               )}
               {updateStatus.status === 'downloading' && (
@@ -747,36 +695,26 @@ export default function App(){
               )}
               {updateStatus.status === 'downloaded' && (
                 <>
-                  <p className="banner-title">
-                    Update{updateStatus.version ? ` ${updateStatus.version}` : ''} ready to install.
-                  </p>
+                  <p className="banner-title">Update{updateStatus.version ? ` ${updateStatus.version}` : ''} ready to install.</p>
                   <p className="banner-subtitle">Restart to finish updating.</p>
                 </>
               )}
               {updateStatus.status === 'error' && (
                 <>
                   <p className="banner-title">Update failed.</p>
-                  <p className="banner-subtitle">
-                    {updateStatus.message ?? 'Something went wrong while downloading the update.'}
-                  </p>
+                  <p className="banner-subtitle">{updateStatus.message ?? 'Something went wrong while downloading the update.'}</p>
                 </>
               )}
             </div>
             <div className="system-banner-actions">
               {updateStatus.status === 'available' && (
-                <button type="button" className="header-pill ghost" onClick={startDownload}>
-                  <span>Download</span>
-                </button>
+                <button type="button" className="header-pill ghost" onClick={startDownload}><span>Download</span></button>
               )}
               {updateStatus.status === 'downloaded' && (
-                <button type="button" className="header-pill accent" onClick={installUpdate}>
-                  <span>Restart and install</span>
-                </button>
+                <button type="button" className="header-pill accent" onClick={installUpdate}><span>Restart and install</span></button>
               )}
               {updateStatus.status === 'error' && (
-                <button type="button" className="header-pill ghost" onClick={retryCheck}>
-                  <span>Retry</span>
-                </button>
+                <button type="button" className="header-pill ghost" onClick={retryCheck}><span>Retry</span></button>
               )}
               {updateStatus.status === 'downloading' && (
                 <span className="banner-progress">{percent}%</span>
@@ -808,15 +746,26 @@ export default function App(){
                 onOpen={openBoard}
                 onCreate={createBoard}
                 onRename={renameBoard}
+                onDuplicate={duplicateBoard}
                 onDelete={deleteBoard}
               />
             )}
             {route.name==='board' && (
-              <Board
-                board={boards.find(b=>b.id===route.id)}
-                onUpdate={updateBoard}
-                onDelete={deleteBoard}
-              />
+              activeBoard ? (
+                <Board
+                  key={activeBoard.id}
+                  board={activeBoard}
+                  focusCardId={route.cardId ?? null}
+                  onUpdate={updateBoard}
+                  onDelete={deleteBoard}
+                  onToast={pushToast}
+                />
+              ) : (
+                <div className="board-missing">
+                  <p>That board no longer exists.</p>
+                  <button type="button" className="button accent-button" onClick={showBoards}>Back to boards</button>
+                </div>
+              )
             )}
             {route.name==='notes-dashboard' && (
               <NotesDashboard
@@ -836,6 +785,7 @@ export default function App(){
                 onUpdateNote={updateNote}
                 onDeleteNote={deleteNote}
                 onShowDashboard={showNotesDashboard}
+                onToast={pushToast}
               />
             )}
             {route.name==='canvas-dashboard' && (
@@ -852,6 +802,9 @@ export default function App(){
                 canvases={canvases}
                 selectedCanvasId={currentCanvasId}
                 onUpdateCanvas={updateCanvasScene}
+                onRenameCanvas={renameCanvas}
+                onShowDashboard={showCanvasDashboard}
+                theme={preferences.theme}
               />
             )}
             {route.name==='settings' && (
@@ -859,32 +812,27 @@ export default function App(){
                 themes={THEMES}
                 selectedTheme={preferences.theme}
                 onSelectTheme={(id)=>setPreferences(prev=>({ ...prev, theme:id }))}
-                reducedMotion={preferences.reducedMotion}
-                focusMode={preferences.focusMode}
-                onToggleReducedMotion={()=>setPreferences(prev=>({ ...prev, reducedMotion:!prev.reducedMotion }))}
-                onToggleFocusMode={()=>setPreferences(prev=>({ ...prev, focusMode:!prev.focusMode }))}
+                preferences={preferences}
+                onTogglePreference={(key)=>setPreferences(prev=>({ ...prev, [key]:!prev[key] }))}
+                onExportBackup={exportBackup}
+                onImportBackup={importBackup}
+                onClearWorkspace={clearWorkspace}
+                counts={{ boards: boards.length, notes: notes.length, canvases: canvases.length }}
                 renderIcon={(name, className)=> <SvgIcon name={name} className={className} />}
               />
             )}
           </main>
         </div>
       </div>
-      <QuickActionsSheet
-        isOpen={isQuickActionsOpen}
-        onClose={closeQuickActions}
-        onCreateBoard={()=>createBoard('New board')}
-        onCreateNote={()=>createNote('New note')}
-        onCreateCanvas={()=>createCanvas('New canvas')}
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        onClose={closePalette}
+        index={searchIndexData}
+        commands={paletteCommands}
+        onOpenItem={openSearchResult}
         onNavigate={navigateQuick}
       />
+      <Toasts items={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
-
-
-
-
-
-
-
-

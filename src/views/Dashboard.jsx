@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { boardLabelColors, WALLPAPERS } from '../lib.js';
+import { boardLabelColors, boardCardCount, WALLPAPERS } from '../lib.js';
 import BoardModal from '../components/BoardModal.jsx';
 import Confirm from '../components/Confirm.jsx';
 
@@ -15,7 +15,7 @@ const PlusIcon = ()=>(
   </svg>
 );
 
-export default function Dashboard({ boards, onOpen, onCreate, onRename, onDelete }) {
+export default function Dashboard({ boards, onOpen, onCreate, onRename, onDuplicate, onDelete }) {
   const [showNew, setShowNew] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [query, setQuery] = useState('');
@@ -27,6 +27,7 @@ export default function Dashboard({ boards, onOpen, onCreate, onRename, onDelete
     const mapped = boards.map(board=>({
       ...board,
       dots: boardLabelColors(board),
+      cardCount: boardCardCount(board),
       searchable: board.name?.toLowerCase() ?? ''
     }));
 
@@ -37,7 +38,7 @@ export default function Dashboard({ boards, onOpen, onCreate, onRename, onDelete
     const sorted = filtered.sort((a,b)=>{
       if(sort==='name-az') return (a.name ?? '').localeCompare(b.name ?? '');
       if(sort==='name-za') return (b.name ?? '').localeCompare(a.name ?? '');
-      return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+      return (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0);
     });
 
     return sorted;
@@ -102,7 +103,7 @@ export default function Dashboard({ boards, onOpen, onCreate, onRename, onDelete
           <span className="control-label">Sort</span>
           <div className="dashboard-sort">
             <select value={sort} onChange={(event)=>setSort(event.target.value)}>
-              <option value="newest">Newest</option>
+              <option value="newest">Recently updated</option>
               <option value="name-az">Name A–Z</option>
               <option value="name-za">Name Z–A</option>
             </select>
@@ -170,6 +171,13 @@ export default function Dashboard({ boards, onOpen, onCreate, onRename, onDelete
                   </button>
                   <button
                     type="button"
+                    className="card-action-btn"
+                    onClick={(event)=>{ event.stopPropagation(); onDuplicate?.(board.id); }}
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
                     className="card-action-btn danger"
                     onClick={(event)=>{ event.stopPropagation(); setConfirm({ id:board.id, name:board.name }); }}
                   >
@@ -183,7 +191,7 @@ export default function Dashboard({ boards, onOpen, onCreate, onRename, onDelete
                 ))}
               </div>
               <footer className="board-card-footer">
-                <span>{new Date(board.updatedAt || board.createdAt || Date.now()).toLocaleDateString()}</span>
+                <span>{board.cardCount} cards · {new Date(board.updatedAt || board.createdAt || Date.now()).toLocaleDateString()}</span>
                 <span className="link-label">Open</span>
               </footer>
             </div>

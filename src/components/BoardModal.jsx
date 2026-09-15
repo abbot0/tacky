@@ -43,6 +43,8 @@ export default function BoardModal({
           className="field-input"
           value={name}
           onChange={(event)=>setName(event.target.value)}
+          autoFocus
+          onKeyDown={(event)=>{ if(event.key==="Enter"){ event.preventDefault(); submit(); } }}
           placeholder="Project X"
         />
       </div>
