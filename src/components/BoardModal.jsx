@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { WALLPAPERS } from '../lib.js';
+import { WALLPAPERS, BOARD_TEMPLATES } from '../lib.js';
 import Modal from './Modal.jsx';
 
 export default function BoardModal({
@@ -10,10 +10,11 @@ export default function BoardModal({
 }){
   const [name, setName] = useState(initial?.name ?? '');
   const [wallpaper, setWallpaper] = useState(initial?.wallpaper ?? WALLPAPERS[0]);
+  const [template, setTemplate] = useState(initial?.template ?? 'kanban');
 
   const submit = ()=>{
     if(!name.trim()) return;
-    onSubmit?.({ name: name.trim(), wallpaper });
+    onSubmit?.({ name: name.trim(), wallpaper, template });
   };
 
   return (
@@ -47,6 +48,29 @@ export default function BoardModal({
           onKeyDown={(event)=>{ if(event.key==="Enter"){ event.preventDefault(); submit(); } }}
           placeholder="Project X"
         />
+      </div>
+
+      <div className="modal-section">
+        <label className="field-label">Template</label>
+        <div className="template-grid">
+          {BOARD_TEMPLATES.map(option => (
+            <button
+              key={option.id}
+              type="button"
+              className={`template-card${option.id===template ? ' is-selected' : ''}`}
+              onClick={()=>setTemplate(option.id)}
+              aria-pressed={option.id===template}
+            >
+              <span className="template-name">{option.name}</span>
+              <span className="template-desc">{option.description}</span>
+              {option.lists.length > 0 && (
+                <span className="template-lists" aria-hidden="true">
+                  {option.lists.map(l => <span key={l} />)}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="modal-section">

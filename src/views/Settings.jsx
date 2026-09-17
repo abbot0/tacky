@@ -64,6 +64,8 @@ export default function Settings({
   onExportBackup,
   onImportBackup,
   onClearWorkspace,
+  onListBackups,
+  onRestoreBackup,
   counts = {},
   renderIcon
 }) {
@@ -74,6 +76,8 @@ export default function Settings({
 
   const [stats, setStats] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const [backups, setBackups] = useState([]);
+  useEffect(() => { onListBackups?.().then(list => setBackups(Array.isArray(list) ? list : [])).catch(() => setBackups([])); }, [onListBackups]);
 
   const refreshStats = () => { storageStats().then(setStats).catch(() => setStats(null)); };
   useEffect(() => { refreshStats(); }, [counts.boards, counts.notes, counts.canvases]);
@@ -183,6 +187,27 @@ export default function Settings({
               <button type="button" className="button ghost-button" onClick={refreshStats}>Refresh</button>
             </div>
           </div>
+          {isFileStore && (
+            <div className="data-card">
+              <h4>Automatic backups</h4>
+              <p>Tacky snapshots your data once a day on launch and keeps the last 7. Restoring first saves a "pre-restore" copy of today.</p>
+              {backups.length ? (
+                <ul className="data-list">
+                  {backups.map(b => (
+                    <li key={b.stamp}>
+                      <span>{b.stamp}</span>
+                      <span className="data-list-actions">
+                        {formatBytes(b.bytes)}
+                        <button type="button" className="card-action-btn" onClick={() => setConfirm({ restore: b.stamp })}>Restore</button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No automatic backups yet — the first one is taken on the next launch.</p>
+              )}
+            </div>
+          )}
           <div className="data-card data-card-danger">
             <h4>Clear workspace</h4>
             <p>Removes every board, note and canvas. Export a backup first — this cannot be undone.</p>
@@ -208,6 +233,11 @@ export default function Settings({
       {confirm === 'replace' && (
         <Confirm title="Replace workspace?" confirmLabel="Choose file & replace" tone="danger" onCancel={() => setConfirm(null)} onConfirm={() => { setConfirm(null); onImportBackup?.('replace'); }}>
           <div className="confirm-copy">Everything currently in Tacky will be replaced with the contents of the backup you pick next.</div>
+        </Confirm>
+      )}
+      {confirm?.restore && (
+        <Confirm title={`Restore backup from ${confirm.restore}?`} confirmLabel="Restore & reload" tone="danger" onCancel={() => setConfirm(null)} onConfirm={() => { const stamp = confirm.restore; setConfirm(null); onRestoreBackup?.(stamp); }}>
+          <div className="confirm-copy">Your current boards, notes and canvases will be replaced with that snapshot. Today's data is saved as a pre-restore backup first. The app reloads afterwards.</div>
         </Confirm>
       )}
       {confirm === 'clear' && (

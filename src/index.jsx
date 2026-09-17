@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import './styles.css';
 import './styles-features.css';
+import './styles-features-2.css';
 import './styles-refresh.css';
 
 if (typeof window !== 'undefined' && typeof window.global === 'undefined'){

@@ -54,7 +54,7 @@ export default function Dashboard({ boards, onOpen, onCreate, onRename, onDuplic
   const closeCreateBoard = ()=> setShowNew(false);
 
   const handleCreateBoard = (vals)=>{
-    onCreate(vals.name, vals.wallpaper);
+    onCreate(vals.name, vals.wallpaper, vals.template);
     closeCreateBoard();
   };
 

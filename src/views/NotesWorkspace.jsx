@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { renderMarkdown } from '../markdown.js';
+import { backlinksFor } from '../lib.js';
 import { saveTextFile } from '../storage.js';
 import { SvgIcon } from '../components/icons.jsx';
 
@@ -19,6 +20,8 @@ export default function NotesWorkspace({
   onUpdateNote,
   onDeleteNote,
   onShowDashboard,
+  onOpenNoteByTitle,
+  onOpenDailyNote,
   onToast
 }){
   const textareaRef = useRef(null);
@@ -90,6 +93,17 @@ export default function NotesWorkspace({
   const lineCount = useMemo(()=> (draft.content.match(/\n/g)?.length ?? 0) + 1,[draft.content]);
   const wordCount = useMemo(()=> draft.content.trim() ? draft.content.trim().split(/\s+/).length : 0,[draft.content]);
   const previewHtml = useMemo(()=> (viewMode === 'edit' ? '' : renderMarkdown(draft.content)),[draft.content, viewMode]);
+  const backlinks = useMemo(()=> backlinksFor(notes, selectedNote),[notes, selectedNote]);
+
+  // [[wiki links]] in the preview open (or create) the target note.
+  const handlePreviewClick = (event)=>{
+    const link = event.target.closest?.('a.wiki-link');
+    if (!link) return;
+    event.preventDefault();
+    onOpenNoteByTitle?.(link.dataset.note);
+  };
+
+  const insertWikiLink = ()=> insertAtCursor('[[', ']]');
 
   const updateCaretPosition = ()=>{
     const el = textareaRef.current;
@@ -179,7 +193,10 @@ export default function NotesWorkspace({
       <aside className="notes-sidebar">
         <div className="notes-sidebar-header">
           <button type="button" className="view-toggle-btn" onClick={onShowDashboard}>Dashboard</button>
-          <button type="button" className="button accent-button" onClick={()=>onCreateNote?.()}>New</button>
+          <div className="notes-sidebar-buttons">
+            <button type="button" className="toolbar-btn" onClick={onOpenDailyNote} title="Open today's daily note">Today</button>
+            <button type="button" className="button accent-button" onClick={()=>onCreateNote?.()}>New</button>
+          </div>
         </div>
         <input
           className="notes-sidebar-search"
@@ -237,6 +254,7 @@ export default function NotesWorkspace({
                 <button className={`toolbar-btn${selectedNote.pinned ? ' is-active' : ''}`} onClick={()=>togglePin(selectedNote)} title={selectedNote.pinned ? 'Unpin' : 'Pin to top'}>
                   <SvgIcon name="pin" className="icon-xs" />
                 </button>
+                <button className="toolbar-btn" onClick={insertWikiLink} title="Insert a [[link]] to another note">[[ ]]</button>
                 <button className="toolbar-btn" onClick={exportMarkdown} title="Export as Markdown">Export</button>
                 {confirmDelete ? (
                   <>
@@ -290,10 +308,18 @@ export default function NotesWorkspace({
                 </div>
               )}
               {viewMode !== 'edit' && (
-                <div className="note-preview markdown-body" dangerouslySetInnerHTML={{ __html: previewHtml || '<p class="note-preview-empty">Nothing to preview yet.</p>' }} />
+                <div className="note-preview markdown-body" onClick={handlePreviewClick} dangerouslySetInnerHTML={{ __html: previewHtml || '<p class="note-preview-empty">Nothing to preview yet.</p>' }} />
               )}
             </div>
 
+            {backlinks.length > 0 && (
+              <div className="note-backlinks">
+                <span className="note-backlinks-title">Linked from</span>
+                {backlinks.map(n => (
+                  <button key={n.id} type="button" className="tag-chip" onClick={()=>onSelectNote?.(n.id)}>{n.title}</button>
+                ))}
+              </div>
+            )}
             <div className="note-status">
               <span>Ln {caret.line}, Col {caret.column}</span>
               <span>Words: {wordCount}</span>

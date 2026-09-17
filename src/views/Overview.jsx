@@ -1,4 +1,28 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { collectAgenda, todayNoteTitle } from '../lib.js';
+
+function AgendaGroup({ title, tone, items, onOpen }) {
+  if (!items.length) return null;
+  return (
+    <div className={`agenda-group tone-${tone}`}>
+      <h4>{title} <span>{items.length}</span></h4>
+      <ul>
+        {items.map(({ card, boardId, boardName, listName, status }) => (
+          <li key={card.id}>
+            <button type="button" onClick={()=>onOpen?.(boardId, card.id)}>
+              <span className="agenda-title">
+                {card.priority && card.priority !== 'none' && <span className={`priority-pip priority-${card.priority}`} />}
+                {card.title}
+              </span>
+              <span className="agenda-meta">{boardName} · {listName}</span>
+              <span className={`card-due due-${status.tone}`}>{status.label}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function SummaryTile({ title, value, subtitle, icon, onAction, actionLabel }) {
   return (
@@ -59,8 +83,11 @@ export default function Overview({
   onOpenCanvas,
   onShowBoards,
   onShowNotes,
-  onShowCanvases
+  onShowCanvases,
+  onOpenDailyNote
 }) {
+  const agenda = useMemo(()=> collectAgenda(boards),[boards]);
+  const agendaCount = agenda.overdue.length + agenda.today.length + agenda.soon.length;
   const recentBoards = boards.slice(0, 4);
   const orderedNotes = notes
     .slice()
@@ -75,11 +102,18 @@ export default function Overview({
     <div className="overview-shell">
       <header className="overview-hero">
         <div className="overview-hero-copy">
-          <h1>Workspace Overview</h1>
-          <p>Jump back into your projects, notes, and canvases from a single launchpad.</p>
+          <h1>{todayNoteTitle()}</h1>
+          <p>
+            {agendaCount === 0
+              ? 'Nothing is due this week. Jump back into your projects, notes, and canvases.'
+              : `${agenda.overdue.length} overdue · ${agenda.today.length} due today · ${agenda.soon.length} due this week`}
+          </p>
         </div>
         <div className="overview-hero-actions">
-          <button type="button" className="button accent-button" onClick={onCreateBoard}>
+          <button type="button" className="button accent-button" onClick={onOpenDailyNote}>
+            Today's note
+          </button>
+          <button type="button" className="button" onClick={onCreateBoard}>
             New board
           </button>
           <button type="button" className="button" onClick={onCreateNote}>
@@ -117,6 +151,17 @@ export default function Overview({
           actionLabel="View canvases"
         />
       </section>
+
+      {agendaCount > 0 && (
+        <section className="agenda">
+          <header className="overview-list-header"><h3>Agenda</h3></header>
+          <div className="agenda-groups">
+            <AgendaGroup title="Overdue" tone="overdue" items={agenda.overdue} onOpen={onOpenBoard} />
+            <AgendaGroup title="Due today" tone="today" items={agenda.today} onOpen={onOpenBoard} />
+            <AgendaGroup title="This week" tone="soon" items={agenda.soon} onOpen={onOpenBoard} />
+          </div>
+        </section>
+      )}
 
       <section className="overview-columns">
         <section className="overview-column">

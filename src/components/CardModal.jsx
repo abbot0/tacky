@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from './Modal.jsx';
 import { LABELS, PRIORITIES, uid, dueStatus } from '../lib.js';
 
-export default function CardModal({ initial, onClose, onSubmit, onDelete }){
+export default function CardModal({ initial, onClose, onSubmit, onDelete, moveTargets = [], currentListId, onMove }){
   const [title, setTitle] = useState(initial?.title ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [due, setDue] = useState(initial?.due ?? '');
@@ -10,6 +10,7 @@ export default function CardModal({ initial, onClose, onSubmit, onDelete }){
   const [priority, setPriority] = useState(initial?.priority ?? 'none');
   const [checklist, setChecklist] = useState(initial?.checklist ?? []);
   const [newItem, setNewItem] = useState('');
+  const [moveTo, setMoveTo] = useState('');
 
   const toggleLabel = (color)=>{
     setLabels(prev => prev.includes(color) ? prev.filter(item=>item!==color) : [...prev, color]);
@@ -116,6 +117,41 @@ export default function CardModal({ initial, onClose, onSubmit, onDelete }){
             ))}
           </div>
         </div>
+
+        {moveTargets.length > 0 && onMove && (
+          <div className="modal-section modal-inline">
+            <div className="modal-field">
+              <label className="field-label" htmlFor="card-move-select">Move to</label>
+              <select
+                id="card-move-select"
+                className="field-input"
+                value={moveTo}
+                onChange={(e)=>setMoveTo(e.target.value)}
+              >
+                <option value="">Choose a list…</option>
+                {moveTargets.map(board => (
+                  <optgroup key={board.id} label={board.name}>
+                    {board.lists.map(list => (
+                      <option key={list.id} value={`${board.id}::${list.id}`} disabled={list.id === currentListId}>
+                        {list.title}{list.id === currentListId ? ' (current)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+            <div className="modal-field modal-field-action">
+              <button
+                type="button"
+                className="button ghost-button"
+                disabled={!moveTo}
+                onClick={()=>{ const [b, l] = moveTo.split('::'); onMove(b, l); }}
+              >
+                Move card
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="modal-section">
           <div className="checklist-header">

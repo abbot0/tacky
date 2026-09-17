@@ -23,9 +23,14 @@ import {
   buildSearchIndex,
   buildBackup,
   parseBackup,
-  mergeById
+  mergeById,
+  boardFromTemplate,
+  dailyNoteFor,
+  createDailyNote,
+  sanitizeCard
 } from './lib.js';
-import { saveTextFile, openTextFile } from './storage.js';
+import { saveTextFile, openTextFile, listBackups, restoreBackup } from './storage.js';
+import FocusTimer from './components/FocusTimer.jsx';
 
 const PREFERENCES_KEY = 'tacky.preferences.v1';
 const DEFAULT_PREFERENCES = { theme:'midnight', reducedMotion:false, focusMode:false, compactCards:false };
@@ -60,7 +65,7 @@ export default function App(){
   const [toasts, setToasts] = useState([]);
   const [updateStatus, setUpdateStatus] = useState({ status:'idle', version:null, progress:null, message:null });
   const [preferences, setPreferences] = useState(loadPreferences);
-  const appVersion = (typeof window !== 'undefined' && window.tacky?.version) || '1.1.0';
+  const appVersion = (typeof window !== 'undefined' && window.tacky?.version) || '1.2.0';
 
   // -------------------------------------------------------------------------
   // Toasts (used for undo-able deletes and import/export feedback)
@@ -253,11 +258,20 @@ export default function App(){
   // -------------------------------------------------------------------------
   // Boards
   // -------------------------------------------------------------------------
-  const createBoard = useCallback((name, wallpaper)=>{
-    const b = defaultBoard(name);
-    if (wallpaper) b.wallpaper = wallpaper;
+  const createBoard = useCallback((name, wallpaper, template='blank')=>{
+    const b = boardFromTemplate(name, template, wallpaper);
     setBoards(prev => [b, ...prev]);
     setRoute({ name:'board', id:b.id });
+  },[]);
+
+  /** Drop a card (already removed from its source board) into another board's list. */
+  const receiveCard = useCallback((card, toBoardId, toListId)=>{
+    const safe = sanitizeCard({ ...card, updatedAt: Date.now() });
+    setBoards(prev => prev.map(b => {
+      if (b.id !== toBoardId) return b;
+      const lists = b.lists.map(l => (l.id === toListId ? { ...l, cards: [...l.cards, safe] } : l));
+      return { ...b, lists, updatedAt: Date.now() };
+    }));
   },[]);
 
   const updateBoard = useCallback((board)=>{
@@ -298,6 +312,34 @@ export default function App(){
     const note = defaultNote(title && title.trim().length ? title.trim() : 'Untitled note');
     setNotes(prev => [note, ...prev]);
     setCurrentNoteId(note.id);
+    setRoute({ name:'notes' });
+  },[]);
+
+  /** Open today's daily note, creating it on first use. */
+  const openDailyNote = useCallback(()=>{
+    const existing = dailyNoteFor(latest.current.notes);
+    if (existing){
+      setCurrentNoteId(existing.id);
+    } else {
+      const note = createDailyNote();
+      setNotes(prev => [note, ...prev]);
+      setCurrentNoteId(note.id);
+    }
+    setRoute({ name:'notes' });
+  },[]);
+
+  /** Open a note by title (used by [[wiki links]]); creates it when missing. */
+  const openNoteByTitle = useCallback((title)=>{
+    const wanted = String(title ?? '').trim().toLowerCase();
+    if (!wanted) return;
+    const existing = latest.current.notes.find(n => n.title.trim().toLowerCase() === wanted);
+    if (existing){
+      setCurrentNoteId(existing.id);
+    } else {
+      const note = defaultNote(String(title).trim());
+      setNotes(prev => [note, ...prev]);
+      setCurrentNoteId(note.id);
+    }
     setRoute({ name:'notes' });
   },[]);
 
@@ -433,8 +475,19 @@ export default function App(){
     }
   },[route.name, createBoard, createCanvas, createNote]);
 
+  const restoreAutoBackup = useCallback(async (stamp)=>{
+    try{
+      await flushWrites();
+      await restoreBackup(stamp);
+      window.location.reload();
+    } catch (err){
+      pushToast({ message:`Restore failed: ${err?.message ?? err}`, tone:'danger' });
+    }
+  },[pushToast]);
+
   const paletteCommands = useMemo(()=>[
-    { id:'new-board', label:'New board', hint:'Create', run:()=>createBoard('New board') },
+    { id:'today-note', label:"Open today's note", hint:'Daily', run:openDailyNote },
+    { id:'new-board', label:'New board', hint:'Create', run:()=>createBoard('New board', null, 'kanban') },
     { id:'new-note', label:'New note', hint:'Create', run:()=>createNote('New note') },
     { id:'new-canvas', label:'New canvas', hint:'Create', run:()=>createCanvas('New canvas') },
     { id:'go-overview', label:'Go to overview', hint:'Ctrl+1', run:showOverview },
@@ -447,7 +500,7 @@ export default function App(){
     ...THEMES.map(theme => ({ id:`theme-${theme.id}`, label:`Theme: ${theme.name}`, hint:'Appearance', run:()=>setPreferences(p=>({ ...p, theme:theme.id })) })),
     { id:'export-backup', label:'Export backup', hint:'Data', run:exportBackup },
     { id:'import-backup', label:'Import backup (merge)', hint:'Data', run:()=>importBackup('merge') }
-  ],[createBoard, createNote, createCanvas, showOverview, showBoards, showNotesDashboard, showCanvasDashboard, showSettings, preferences.focusMode, exportBackup, importBackup]);
+  ],[openDailyNote, createBoard, createNote, createCanvas, showOverview, showBoards, showNotesDashboard, showCanvasDashboard, showSettings, preferences.focusMode, exportBackup, importBackup]);
 
   // -------------------------------------------------------------------------
   // Keyboard shortcuts
@@ -589,7 +642,7 @@ export default function App(){
           <div className="nav-section nav-create">
             <span className="nav-section-title">Create</span>
             <div className="nav-create-actions">
-              <button type="button" onClick={()=>handleNavSelect(()=>createBoard('New board'))}>Board</button>
+              <button type="button" onClick={()=>handleNavSelect(()=>createBoard('New board', null, 'kanban'))}>Board</button>
               <button type="button" onClick={()=>handleNavSelect(()=>createNote('New note'))}>Note</button>
               <button type="button" onClick={()=>handleNavSelect(()=>createCanvas('New canvas'))}>Canvas</button>
             </div>
@@ -652,6 +705,7 @@ export default function App(){
               </div>
             </div>
             <div className="header-controls">
+              <FocusTimer onToast={pushToast} />
               {route.name==='board' && (
                 <button type="button" className="header-pill" onClick={showBoards}>
                   <SvgIcon name="arrowLeft" className="icon-sm" />
@@ -730,9 +784,10 @@ export default function App(){
                 boards={boards}
                 notes={notes}
                 canvases={canvases}
-                onCreateBoard={()=>createBoard('New board')}
+                onCreateBoard={()=>createBoard('New board', null, 'kanban')}
                 onCreateNote={()=>createNote('New note')}
                 onCreateCanvas={()=>createCanvas('New canvas')}
+                onOpenDailyNote={openDailyNote}
                 onOpenBoard={openBoard}
                 onOpenNote={selectNote}
                 onOpenCanvas={selectCanvas}
@@ -760,6 +815,8 @@ export default function App(){
                   onUpdate={updateBoard}
                   onDelete={deleteBoard}
                   onToast={pushToast}
+                  otherBoards={boards.filter(b => b.id !== activeBoard.id).map(b => ({ id:b.id, name:b.name, lists:b.lists.map(l => ({ id:l.id, title:l.title })) }))}
+                  onMoveCardOut={receiveCard}
                 />
               ) : (
                 <div className="board-missing">
@@ -786,6 +843,8 @@ export default function App(){
                 onUpdateNote={updateNote}
                 onDeleteNote={deleteNote}
                 onShowDashboard={showNotesDashboard}
+                onOpenNoteByTitle={openNoteByTitle}
+                onOpenDailyNote={openDailyNote}
                 onToast={pushToast}
               />
             )}
@@ -818,6 +877,8 @@ export default function App(){
                 onExportBackup={exportBackup}
                 onImportBackup={importBackup}
                 onClearWorkspace={clearWorkspace}
+                onListBackups={listBackups}
+                onRestoreBackup={restoreAutoBackup}
                 counts={{ boards: boards.length, notes: notes.length, canvases: canvases.length }}
                 renderIcon={(name, className)=> <SvgIcon name={name} className={className} />}
               />

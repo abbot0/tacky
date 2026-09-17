@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { uid, defaultCard, sanitizeBoard, checklistProgress, dueStatus, LABELS, PRIORITIES } from '../lib.js';
+import { uid, defaultCard, sanitizeBoard, checklistProgress, dueStatus, sortCards, LABELS, PRIORITIES } from '../lib.js';
 import { saveTextFile, openTextFile } from '../storage.js';
 import ListModal from '../components/ListModal.jsx';
 import CardModal from '../components/CardModal.jsx';
@@ -167,9 +167,18 @@ function QuickAdd({ onAdd, onCancel }) {
 // ---------------------------------------------------------------------------
 const ListColumn = memo(function ListColumn({
   list, index, filter, filterActive,
-  onEditCard, onDeleteCard, onAddCard, onRenameList, onToggleCollapse, onDeleteList, onClearDone
+  onEditCard, onDeleteCard, onAddCard, onRenameList, onToggleCollapse, onDeleteList, onClearDone, onSortList
 }) {
   const [renaming, setRenaming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onDoc = (e) => { if (!menuRef.current?.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [menuOpen]);
+  const doneCount = list.cards.filter(c => c.checklist?.length && c.checklist.every(i => i.done)).length;
   const [draft, setDraft] = useState(list.title);
   const [composing, setComposing] = useState(false);
 
@@ -217,6 +226,25 @@ const ListColumn = memo(function ListColumn({
                     <path d="M12 4a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H5a1 1 0 0 1 0-2h6V5a1 1 0 0 1 1-1z" fill="currentColor"/>
                   </svg>
                 </button>
+                <div className="list-menu" ref={menuRef}>
+                  <button type="button" className="icon-small" onClick={() => setMenuOpen(o => !o)} title="List actions" aria-label="List actions" aria-expanded={menuOpen}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm6 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm6 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" fill="currentColor"/></svg>
+                  </button>
+                  {menuOpen && (
+                    <div className="list-menu-popover" role="menu">
+                      <span className="list-menu-title">Sort cards</span>
+                      <button type="button" role="menuitem" onClick={() => { onSortList(list.id, 'due'); setMenuOpen(false); }}>By due date</button>
+                      <button type="button" role="menuitem" onClick={() => { onSortList(list.id, 'priority'); setMenuOpen(false); }}>By priority</button>
+                      <button type="button" role="menuitem" onClick={() => { onSortList(list.id, 'title'); setMenuOpen(false); }}>Alphabetically</button>
+                      <button type="button" role="menuitem" onClick={() => { onSortList(list.id, 'newest'); setMenuOpen(false); }}>Newest first</button>
+                      <span className="list-menu-sep" />
+                      <button type="button" role="menuitem" onClick={() => { setDraft(list.title); setRenaming(true); setMenuOpen(false); }}>Rename list</button>
+                      <button type="button" role="menuitem" disabled={!doneCount} onClick={() => { onClearDone(list.id); setMenuOpen(false); }}>
+                        Clear completed{doneCount ? ` (${doneCount})` : ''}
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <button type="button" className="icon-small" onClick={() => onToggleCollapse(list.id)} title={list.collapsed ? 'Expand list' : 'Collapse list'} aria-label={list.collapsed ? 'Expand list' : 'Collapse list'}>
                   <svg viewBox="0 0 24 24" aria-hidden="true" style={{ transform: list.collapsed ? 'rotate(-90deg)' : 'none' }}>
                     <path d="M6.3 9.3a1 1 0 0 1 1.4 0L12 13.59l4.3-4.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 0 1 0-1.42z" fill="currentColor"/>
@@ -272,7 +300,7 @@ const ListColumn = memo(function ListColumn({
 // ---------------------------------------------------------------------------
 // Board
 // ---------------------------------------------------------------------------
-export default function Board({ board, focusCardId, onUpdate, onDelete, onToast }){
+export default function Board({ board, focusCardId, onUpdate, onDelete, onToast, otherBoards = [], onMoveCardOut }){
   const [local, setLocal] = useState(board);
   const [showList, setShowList] = useState(false);
   const [editCard, setEditCard] = useState(null);
@@ -319,6 +347,27 @@ export default function Board({ board, focusCardId, onUpdate, onDelete, onToast 
     cards: l.cards.map(c => (c.id === card.id ? { ...c, ...card, updatedAt: Date.now() } : c))
   })), []);
   const deleteCard = useCallback((listId, cardId) => updateList(listId, l => ({ ...l, cards: l.cards.filter(c => c.id !== cardId) })), []);
+  const sortList = useCallback((listId, mode) => updateList(listId, l => ({ ...l, cards: sortCards(l.cards, mode) })), []);
+  /** Move a card to another list on this board, or hand it to App for another board. */
+  const moveCard = useCallback((fromListId, cardId, toBoardId, toListId) => {
+    const card = local.lists.find(l => l.id === fromListId)?.cards.find(c => c.id === cardId);
+    if (!card) return;
+    if (!toBoardId || toBoardId === local.id){
+      if (toListId === fromListId) return;
+      setLocal(prev => touch({
+        ...prev,
+        lists: prev.lists.map(l => {
+          if (l.id === fromListId) return { ...l, cards: l.cards.filter(c => c.id !== cardId) };
+          if (l.id === toListId) return { ...l, cards: [...l.cards, card] };
+          return l;
+        })
+      }));
+    } else {
+      setLocal(prev => touch({ ...prev, lists: prev.lists.map(l => (l.id === fromListId ? { ...l, cards: l.cards.filter(c => c.id !== cardId) } : l)) }));
+      onMoveCardOut?.(card, toBoardId, toListId);
+      onToast?.({ message: `Moved “${card.title}” to ${otherBoards.find(b => b.id === toBoardId)?.name ?? 'another board'}.` });
+    }
+  }, [local, onMoveCardOut, onToast, otherBoards]);
   const clearDone = useCallback((listId) => updateList(listId, l => ({
     ...l,
     cards: l.cards.filter(c => !(c.checklist?.length && c.checklist.every(i => i.done)))
@@ -556,6 +605,7 @@ export default function Board({ board, focusCardId, onUpdate, onDelete, onToast 
                     onToggleCollapse={toggleCollapse}
                     onDeleteList={requestDeleteList}
                     onClearDone={clearDone}
+                    onSortList={sortList}
                   />
                 ))}
                 {provided.placeholder}
@@ -575,6 +625,12 @@ export default function Board({ board, focusCardId, onUpdate, onDelete, onToast 
           onClose={() => setEditCard(null)}
           onDelete={() => { setEditCard(null); requestDeleteCard(editingTarget.L.id, editingTarget.C.id, editingTarget.C.title); }}
           onSubmit={(vals) => { updateCard(editingTarget.L.id, { ...editingTarget.C, ...vals }); setEditCard(null); }}
+          moveTargets={[
+            { id: local.id, name: `${local.name} (this board)`, lists: local.lists.map(l => ({ id: l.id, title: l.title })) },
+            ...otherBoards
+          ]}
+          currentListId={editingTarget.L.id}
+          onMove={(toBoardId, toListId) => { setEditCard(null); moveCard(editingTarget.L.id, editingTarget.C.id, toBoardId, toListId); }}
         />
       )}
 

@@ -88,6 +88,84 @@ function registerStorageHandlers(){
 }
 
 // ---------------------------------------------------------------------------
+// Automatic daily backups: copy data/*.json into backups/<YYYY-MM-DD>/ once a
+// day on launch and keep the most recent KEEP_BACKUPS days.
+// ---------------------------------------------------------------------------
+const BACKUP_DIR = path.join(app.getPath('userData'), 'backups');
+const KEEP_BACKUPS = 7;
+const STAMP = /^\d{4}-\d{2}-\d{2}(-[a-z0-9-]+)?$/;
+
+function todayStamp(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+async function copyDataTo(targetDir){
+  await ensureDataDir();
+  await fsp.mkdir(targetDir, { recursive: true });
+  const entries = await fsp.readdir(DATA_DIR);
+  let copied = 0;
+  for (const name of entries){
+    if (!name.endsWith('.json')) continue;
+    await fsp.copyFile(path.join(DATA_DIR, name), path.join(targetDir, name));
+    copied += 1;
+  }
+  return copied;
+}
+
+async function listBackups(){
+  try {
+    const entries = await fsp.readdir(BACKUP_DIR, { withFileTypes: true });
+    const out = [];
+    for (const entry of entries){
+      if (!entry.isDirectory() || !STAMP.test(entry.name)) continue;
+      const dir = path.join(BACKUP_DIR, entry.name);
+      const files = (await fsp.readdir(dir)).filter(f => f.endsWith('.json'));
+      let bytes = 0;
+      for (const f of files) bytes += (await fsp.stat(path.join(dir, f))).size;
+      out.push({ stamp: entry.name, files: files.length, bytes });
+    }
+    return out.sort((a, b) => b.stamp.localeCompare(a.stamp));
+  } catch (err) {
+    if (err?.code === 'ENOENT') return [];
+    throw err;
+  }
+}
+
+async function runDailyBackup(){
+  try {
+    const entries = await fsp.readdir(DATA_DIR).catch(() => []);
+    if (!entries.some(n => n.endsWith('.json'))) return; // nothing to back up yet
+    const target = path.join(BACKUP_DIR, todayStamp());
+    try { await fsp.access(target); return; } catch (_) {}
+    await copyDataTo(target);
+    const backups = await listBackups();
+    for (const old of backups.slice(KEEP_BACKUPS)){
+      await fsp.rm(path.join(BACKUP_DIR, old.stamp), { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.error('[backup] daily backup failed', err);
+  }
+}
+
+function registerBackupHandlers(){
+  ipcMain.handle('backup:list', () => listBackups());
+  ipcMain.handle('backup:restore', async (_event, stamp) => {
+    if (typeof stamp !== 'string' || !STAMP.test(stamp)) throw new Error('Invalid backup id');
+    const source = path.join(BACKUP_DIR, stamp);
+    await fsp.access(source);
+    // Snapshot the current data first so a restore is itself undoable.
+    await Promise.all(Array.from(writeQueues.values()));
+    await copyDataTo(path.join(BACKUP_DIR, `${todayStamp()}-pre-restore`));
+    const files = (await fsp.readdir(source)).filter(f => f.endsWith('.json'));
+    for (const f of files){
+      await fsp.copyFile(path.join(source, f), path.join(DATA_DIR, f));
+    }
+    return { restored: files.length };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Native file dialogs for import/export.
 // ---------------------------------------------------------------------------
 function registerFileHandlers(){
@@ -297,9 +375,11 @@ app.whenReady().then(() => {
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
   registerStorageHandlers();
+  registerBackupHandlers();
   registerFileHandlers();
   registerUpdaterHandlers();
   createWindow();
+  runDailyBackup();
 
   if (!isDev){
     autoUpdater.checkForUpdates().catch(err => {

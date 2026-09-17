@@ -189,3 +189,19 @@ if (typeof window !== 'undefined'){
     if (document.visibilityState === 'hidden') flushWrites();
   });
 }
+
+// ---------------------------------------------------------------------------
+// Automatic backups (Electron only; the main process snapshots the data dir
+// once per day and keeps the last few).
+// ---------------------------------------------------------------------------
+export async function listBackups(){
+  const api = bridge()?.backups;
+  if (!api?.list) return [];
+  try { return await api.list(); } catch { return []; }
+}
+
+export function restoreBackup(stamp){
+  const api = bridge()?.backups;
+  if (!api?.restore) return Promise.reject(new Error('Automatic backups are only available in the desktop app.'));
+  return api.restore(stamp);
+}

@@ -27,6 +27,10 @@ contextBridge.exposeInMainWorld('tacky', {
     stats: () => ipcRenderer.invoke('storage:stats'),
     openDir: () => ipcRenderer.invoke('storage:open-dir')
   },
+  backups: {
+    list: () => ipcRenderer.invoke('backup:list'),
+    restore: (stamp) => ipcRenderer.invoke('backup:restore', stamp)
+  },
   files: {
     save: (options) => ipcRenderer.invoke('file:save', options),
     open: (options) => ipcRenderer.invoke('file:open', options)

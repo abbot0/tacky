@@ -139,7 +139,8 @@ export function sanitizeNote(n){
     pinned: Boolean(n?.pinned),
     createdAt: num(n?.createdAt, now),
     updatedAt: num(n?.updatedAt, now),
-    isDaily: Boolean(n?.isDaily)
+    isDaily: Boolean(n?.isDaily),
+    dailyKey: typeof n?.dailyKey === 'string' ? n.dailyKey : null
   };
 }
 
@@ -351,4 +352,105 @@ export function formatBytes(bytes){
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes/1024).toFixed(1)} KB`;
   return `${(bytes/(1024*1024)).toFixed(2)} MB`;
+}
+
+// ---------------------------------------------------------------------------
+// Board templates
+// ---------------------------------------------------------------------------
+export const BOARD_TEMPLATES = [
+  { id:'blank', name:'Blank', description:'Start from nothing.', lists:[] },
+  { id:'kanban', name:'Kanban', description:'To do · Doing · Done', lists:['To do','Doing','Done'] },
+  { id:'sprint', name:'Sprint', description:'Backlog through release', lists:['Backlog','This sprint','In progress','Review','Done'] },
+  { id:'weekly', name:'Weekly planner', description:'One list per weekday', lists:['Monday','Tuesday','Wednesday','Thursday','Friday','Weekend'] },
+  { id:'ideas', name:'Idea funnel', description:'Capture, evaluate, ship', lists:['Ideas','Worth exploring','Building','Shipped'] }
+];
+
+export function boardFromTemplate(name, templateId, wallpaper){
+  const template = BOARD_TEMPLATES.find(t => t.id === templateId) ?? BOARD_TEMPLATES[0];
+  const board = defaultBoard(name);
+  if (wallpaper) board.wallpaper = wallpaper;
+  board.lists = template.lists.map(title => sanitizeList({ id: uid('l'), title, cards: [] }));
+  return board;
+}
+
+// ---------------------------------------------------------------------------
+// Agenda: due cards across every board
+// ---------------------------------------------------------------------------
+export function collectAgenda(boards, { horizonDays = 7 } = {}){
+  const buckets = { overdue: [], today: [], soon: [] };
+  for (const board of asArray(boards)){
+    for (const list of board.lists ?? []){
+      for (const card of list.cards ?? []){
+        if (!card.due) continue;
+        const done = card.checklist?.length && card.checklist.every(i => i.done);
+        if (done) continue;
+        const status = dueStatus(card.due);
+        if (!status) continue;
+        const entry = { card, boardId: board.id, boardName: board.name, listName: list.title, status };
+        if (status.tone === 'overdue') buckets.overdue.push(entry);
+        else if (status.tone === 'today') buckets.today.push(entry);
+        else if (status.diffDays <= horizonDays) buckets.soon.push(entry);
+      }
+    }
+  }
+  const byDue = (a, b) => a.card.due.localeCompare(b.card.due) || a.card.title.localeCompare(b.card.title);
+  buckets.overdue.sort(byDue); buckets.today.sort(byDue); buckets.soon.sort(byDue);
+  return buckets;
+}
+
+export const PRIORITY_RANK = { urgent:4, high:3, medium:2, low:1, none:0 };
+
+export function sortCards(cards, mode){
+  const list = asArray(cards).slice();
+  switch(mode){
+    case 'due':
+      return list.sort((a,b)=> (a.due || '9999').localeCompare(b.due || '9999') || a.title.localeCompare(b.title));
+    case 'priority':
+      return list.sort((a,b)=> (PRIORITY_RANK[b.priority] ?? 0) - (PRIORITY_RANK[a.priority] ?? 0) || a.title.localeCompare(b.title));
+    case 'title':
+      return list.sort((a,b)=> a.title.localeCompare(b.title));
+    case 'newest':
+      return list.sort((a,b)=> (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    default:
+      return list;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Daily notes + wiki links
+// ---------------------------------------------------------------------------
+export function todayNoteTitle(date = new Date()){
+  return date.toLocaleDateString(undefined, { weekday:'short', year:'numeric', month:'short', day:'numeric' });
+}
+
+const localDateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+export function dailyNoteFor(notes, date = new Date()){
+  const key = localDateKey(date);
+  return asArray(notes).find(n => n.isDaily && n.dailyKey === key) ?? null;
+}
+
+export function createDailyNote(date = new Date()){
+  const key = localDateKey(date);
+  const note = defaultNote(todayNoteTitle(date), `# ${todayNoteTitle(date)}\n\n## Focus\n- [ ] \n\n## Notes\n`);
+  note.isDaily = true;
+  note.dailyKey = key;
+  note.tags = ['daily'];
+  return note;
+}
+
+const WIKI_LINK = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+
+/** Titles referenced via [[Title]] in a note body. */
+export function extractWikiLinks(content){
+  const out = new Set();
+  String(content ?? '').replace(WIKI_LINK, (_, target) => { out.add(target.trim().toLowerCase()); return ''; });
+  return Array.from(out);
+}
+
+/** Notes whose content links to `note` by title. */
+export function backlinksFor(notes, note){
+  if (!note) return [];
+  const title = note.title.trim().toLowerCase();
+  return asArray(notes).filter(n => n.id !== note.id && extractWikiLinks(n.content).includes(title));
 }

@@ -5,7 +5,10 @@ Tacky is an offline-first productivity workspace built with **Electron** and **R
 ## ✨ Features
 
 ### Boards
+- **Templates** when creating a board: Kanban, Sprint, Weekly planner, Idea funnel, or blank.
 - Lists and cards with drag-and-drop (cards and whole columns).
+- List menu: **sort cards** by due date / priority / title / newest, rename, clear completed.
+- **Move a card** to any list on any board from the card editor.
 - **Quick-add** cards inline (`Enter` to add, `Shift+Enter` for a new line).
 - Cards carry a description, due date, colour labels, **priority** (low → urgent) and a **checklist** with a progress bar.
 - Due-date badges: overdue / today / this week, with an overdue counter in the board header.
@@ -14,6 +17,8 @@ Tacky is an offline-first productivity workspace built with **Electron** and **R
 - Export / import a single board as JSON.
 
 ### Notes
+- **Daily notes** — one click (or the palette) opens today's note, created from a template on first use.
+- **`[[Wiki links]]`** between notes: click a link in the preview to jump to (or create) that note; each note shows what links to it.
 - Plain-text editor with line numbers, tab support and a live word/character count.
 - **Markdown preview** — Edit, Split or Preview modes (headings, lists, task lists, code blocks, quotes, links).
 - `Ctrl+B` / `Ctrl+I` / `Ctrl+E` for bold / italic / inline code.
@@ -26,6 +31,9 @@ Tacky is an offline-first productivity workspace built with **Electron** and **R
 - Follows the app theme (dark / light).
 
 ### Everywhere
+- **Agenda** on the overview: overdue, due-today and this-week cards across every board, one click from the editor.
+- **Focus timer** in the header (25/5/15 presets) with a notification when a session ends.
+- **Automatic daily backups** — the desktop app snapshots your data on launch, keeps the last 7, and lets you restore any of them from Settings.
 - **Search everything** with `Ctrl+K`: boards, cards, notes and canvases, plus app commands (type `>` to search commands only). Opening a card result jumps straight to its editor.
 - **Undo** after deleting a board, note or canvas — a toast offers to put it back.
 - Keyboard shortcuts: `Ctrl+1…5` to switch workspaces, `Ctrl+N` to create in the current one, `Ctrl+B` to toggle the sidebar.
