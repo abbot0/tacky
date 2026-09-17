@@ -73,11 +73,11 @@ body[data-theme='light'] .quick-actions-backdrop{ background:rgba(15,23,42,.35);
   width:36px;
   height:36px;
   border-radius:11px;
-  box-shadow:none;
-  background:linear-gradient(135deg,var(--color-primary),var(--color-accent));
-  color:#fff;
+  box-shadow:0 0 0 1px rgba(212,184,255,.18), 0 6px 16px rgba(42,31,78,.5);
+  background:radial-gradient(circle at 50% 40%, #2a1f4e 0%, #0f0c1a 100%);
+  color:#e0cbff;
 }
-.nav-logo .brand-icon{ width:22px; height:22px; }
+.nav-logo .brand-icon{ width:20px; height:20px; filter:drop-shadow(0 0 4px rgba(212,184,255,.6)); }
 .nav-brand-title{ font-size:15px; letter-spacing:0; }
 .nav-brand-subtitle{ font-size:11px; letter-spacing:.04em; text-transform:none; }
 .nav-section{ gap:8px; }
