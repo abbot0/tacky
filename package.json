@@ -1,6 +1,6 @@
 {
   "name": "tacky",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Offline-first productivity desktop app: kanban boards, Markdown notes and Excalidraw canvases, built with Electron + React",
   "main": "electron/main.cjs",
   "scripts": {

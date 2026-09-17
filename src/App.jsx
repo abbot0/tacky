@@ -65,7 +65,7 @@ export default function App(){
   const [toasts, setToasts] = useState([]);
   const [updateStatus, setUpdateStatus] = useState({ status:'idle', version:null, progress:null, message:null });
   const [preferences, setPreferences] = useState(loadPreferences);
-  const appVersion = (typeof window !== 'undefined' && window.tacky?.version) || '1.2.0';
+  const appVersion = (typeof window !== 'undefined' && window.tacky?.version) || '1.2.1';
 
   // -------------------------------------------------------------------------
   // Toasts (used for undo-able deletes and import/export feedback)
@@ -608,7 +608,7 @@ export default function App(){
         <div className="nav-panel-inner">
           <div className="nav-brand">
             <span className="nav-logo">
-              <SvgIcon name="sparkle" className="brand-icon" />
+              <SvgIcon name="logo" className="brand-icon" />
             </span>
             <div className="nav-brand-copy">
               <span className="nav-brand-title">Tacky Studio</span>
